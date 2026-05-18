@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spatial Analysis Studio</title>
+<style>
+:root{
+  --bg:#080b12;--surf:#0e1220;--surf2:#141826;--surf3:#1a1f30;
+  --bd:rgba(255,255,255,.06);--bd2:rgba(255,255,255,.12);
+  --text:#cdd5e8;--muted:#4a5568;
+  --cyan:#2bbfb0;--green:#1fa876;--red:#d44f4f;--amber:#d4961e;--purple:#7c6dcc;--blue:#4c9fd4;--orange:#c95c28;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono',ui-monospace,Consolas,monospace;font-size:11px;display:flex;flex-direction:column}
+
+/* topbar */
+#topbar{display:flex;align-items:center;gap:8px;padding:0 12px;height:36px;background:var(--surf);border-bottom:1px solid var(--bd);flex-shrink:0;flex-wrap:wrap}
+.logo{font-size:11px;font-weight:700;color:#c8d4f0}.logo em{color:var(--cyan);font-style:normal}
+.pill{font-size:9px;padding:1px 7px;border-radius:10px;border:1px solid;font-weight:600;white-space:nowrap}
+.p-idle{color:var(--muted);border-color:var(--muted)}
+.p-ok{color:var(--green);border-color:var(--green)}
+.p-busy{color:var(--amber);border-color:var(--amber);animation:blink .8s infinite}
+.p-play{color:#f87171;border-color:#f87171;animation:blink 1s infinite}
+#ts-disp{margin-left:auto;font-size:10px;color:var(--cyan);font-family:monospace}
+
+/* wizard */
+#wizbar{display:flex;align-items:stretch;background:var(--surf2);border-bottom:1px solid var(--bd);flex-shrink:0;height:32px;overflow-x:auto}
+.ws{display:flex;align-items:center;gap:5px;padding:0 10px;font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-right:1px solid var(--bd);white-space:nowrap;position:relative;flex-shrink:0}
+.ws::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:transparent}
+.ws.active{color:var(--cyan)}.ws.active::after{background:var(--cyan)}
+.ws.done{color:var(--green)}.ws.done::after{background:var(--green)}
+.wn{width:14px;height:14px;border-radius:50%;border:1px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;flex-shrink:0}
+#nxt{margin-left:auto;margin-right:8px;align-self:center;font-size:9px;font-weight:700;padding:3px 14px;border-radius:4px;border:1px solid var(--cyan);background:rgba(43,191,176,.13);color:var(--cyan);cursor:pointer;font-family:inherit;white-space:nowrap}
+#nxt:hover:not(:disabled){background:rgba(43,191,176,.25)}
+#nxt:disabled{opacity:.28;cursor:not-allowed}
+
+/* main */
+#main{display:grid;grid-template-columns:auto 1fr 280px;gap:1px;background:var(--bd);flex:1;min-height:0}
+.panel{background:var(--bg);display:flex;flex-direction:column;min-height:0}
+.ph{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:var(--surf);border-bottom:1px solid var(--bd);flex-shrink:0;gap:4px;flex-wrap:wrap}
+.ptitle{font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.cwrap{position:relative;flex:1;min-height:0;background:#03050d;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.cwrap canvas{display:block;max-width:100%;max-height:100%}
+/* Camera panel: show image at natural size, scroll if bigger than panel */
+#lwrap{overflow:auto;align-items:flex-start;justify-content:flex-start;}
+#lwrap canvas{max-width:none;max-height:none;display:block;}
+.hint{position:absolute;font-size:10px;color:var(--muted);text-align:center;pointer-events:none;line-height:1.8}
+
+/* playback */
+#ctrlbar{display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--surf);border-top:1px solid var(--bd);flex-shrink:0}
+.pbtn{width:22px;height:22px;border-radius:50%;border:1px solid var(--bd2);background:var(--surf3);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pbtn:hover{border-color:var(--cyan)}
+.tri{width:0;height:0;border:4px solid transparent;border-left:7px solid var(--text);margin-left:2px}
+.brs{display:flex;gap:2px}.br{width:2px;height:7px;background:var(--text);border-radius:1px}
+.tlt{flex:1;height:4px;background:var(--surf3);border-radius:2px;cursor:pointer;position:relative;min-width:40px}
+.tlf{height:100%;background:var(--cyan);border-radius:2px}
+.tlth{position:absolute;width:8px;height:8px;border-radius:50%;background:var(--cyan);top:50%;transform:translate(-50%,-50%);pointer-events:none}
+.tslbl{font-size:9px;color:var(--muted);font-family:monospace;white-space:nowrap}
+.spdsel{font-size:9px;background:var(--surf3);color:var(--text);border:1px solid var(--bd2);border-radius:3px;padding:1px 5px;height:20px;font-family:inherit}
+
+/* legstrip */
+#legstrip{display:flex;align-items:center;gap:5px;padding:3px 8px;background:var(--surf);border-top:1px solid var(--bd);flex-shrink:0;flex-wrap:wrap}
+.legbar{flex:1;min-width:50px;height:7px;border-radius:3px}
+.legval{font-size:8px;color:var(--muted);white-space:nowrap}
+
+/* sidebar */
+#sidebar{display:flex;flex-direction:column;gap:1px;background:var(--bd);overflow-y:auto}
+.sb{background:var(--bg);padding:7px 9px;flex-shrink:0}
+.sbt{font-size:7px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;padding-bottom:2px;border-bottom:1px solid var(--bd)}
+.upz{border:1px dashed rgba(255,255,255,.09);border-radius:4px;padding:6px 8px;text-align:center;cursor:pointer;color:var(--muted);font-size:9px;line-height:1.7;transition:all .2s;margin-bottom:4px}
+.upz:hover{border-color:var(--blue);color:var(--blue)}
+.upz.ok{border-color:var(--green);color:var(--green);border-style:solid}
+.upz b{display:block;font-size:9px;font-weight:700;margin-bottom:1px}
+input[type=file]{display:none}
+.frow{display:flex;align-items:center;gap:5px;margin-bottom:4px}
+.frow label{font-size:8px;color:var(--muted);width:72px;flex-shrink:0}
+.frow input[type=number],.frow select{flex:1;font-size:9px;background:var(--surf3);color:var(--text);border:1px solid var(--bd2);border-radius:3px;padding:2px 4px;font-family:inherit;min-width:0}
+.frow input[type=checkbox]{width:13px;height:13px;cursor:pointer;accent-color:var(--cyan)}
+.btn{display:block;font-size:9px;padding:4px 8px;border-radius:3px;border:1px solid var(--bd2);background:var(--surf2);color:var(--text);cursor:pointer;width:100%;margin-top:3px;text-align:center;font-family:inherit}
+.btn:hover{border-color:var(--blue);color:var(--blue)}
+.btn-g{background:var(--green);color:#fff;border-color:var(--green)}
+.btn-p{background:var(--purple);color:#fff;border-color:var(--purple)}
+.btn-r{color:var(--red);border-color:rgba(212,79,79,.3)}.btn-r:hover{background:rgba(212,79,79,.08)}
+.btn-c{background:var(--cyan);color:#000;border-color:var(--cyan)}
+.mbtns{display:flex;gap:3px;flex-wrap:wrap}
+.mb{font-size:8px;padding:1px 6px;border-radius:3px;border:1px solid var(--bd2);color:var(--muted);cursor:pointer;background:transparent;white-space:nowrap;font-family:inherit}
+.mb:hover{border-color:var(--text);color:var(--text)}
+.mb.on{border-color:var(--cyan);color:var(--cyan);background:rgba(43,191,176,.08)}
+.mb.on-p{border-color:var(--purple);color:var(--purple);background:rgba(124,109,204,.1)}
+.mb.on-o{border-color:var(--orange);color:var(--orange);background:rgba(201,92,40,.1)}
+
+/* zone type pills */
+.ztype-row{display:flex;gap:3px;flex-wrap:wrap;margin-top:3px}
+.ztype-pill{font-size:8px;padding:1px 6px;border-radius:8px;border:1px solid;cursor:pointer;transition:all .15s;font-family:inherit}
+
+/* person rows */
+.prow{display:flex;align-items:center;gap:4px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.03)}
+.prow:last-child{border:none}
+.pdot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.pnm{font-size:9px;width:32px;color:#8892a6;font-family:monospace}
+.bb{flex:1;height:3px;background:var(--surf3);border-radius:2px;overflow:hidden}
+.bf{height:100%;border-radius:2px}
+.bv{font-size:8px;color:var(--muted);min-width:26px;text-align:right}
+
+/* modals */
+.modal{display:none;position:fixed;inset:0;background:rgba(4,6,14,.94);z-index:200;overflow-y:auto;padding:20px 12px}
+.mbox{max-width:820px;margin:0 auto;background:var(--surf);border:1px solid var(--bd2);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.mbox.sm{max-width:360px}
+.mh{font-size:11px;font-weight:700;color:#dde2f0}
+.md{font-size:9px;color:var(--muted);line-height:1.8}.md b{color:#dde2f0}
+.mrow{display:flex;align-items:center;gap:7px}
+.mrow label{font-size:9px;color:var(--muted);flex-shrink:0;width:70px}
+.mrow input,.mrow select{flex:1;font-size:9px;background:var(--surf3);color:var(--text);border:1px solid var(--bd2);border-radius:3px;padding:2px 5px;font-family:inherit;min-width:0}
+.mbtns2{display:flex;gap:6px;flex-wrap:wrap}.mbtns2 .btn{width:auto;margin:0}
+.cal-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cal-side{display:flex;flex-direction:column;gap:4px}
+.cal-lbl{font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.cal-box{background:#03050d;border:1px solid var(--bd2);border-radius:4px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:200px;cursor:crosshair}
+.cal-box canvas{display:block;max-width:100%;max-height:280px;cursor:crosshair}
+
+/* progress */
+#prog{display:none;position:fixed;inset:0;background:rgba(4,6,14,.88);z-index:400;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+#prog.show{display:flex}
+#prog-track{width:280px;height:5px;background:var(--surf3);border-radius:3px;overflow:hidden}
+#prog-fill{height:100%;background:var(--cyan);border-radius:3px;width:0%}
+#prog-lbl{font-size:9px;color:var(--muted)}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <span class="logo">Spatial <em>Analysis</em> Studio</span>
+  <span class="pill p-idle" id="pill">IDLE</span>
+  <span id="ts-disp"></span>
+</div>
+
+<div id="wizbar">
+  <div class="ws active" id="ws1"><div class="wn">1</div>Analysis CSV</div>
+  <div class="ws" id="ws2"><div class="wn">2</div>Floor Plan</div>
+  <div class="ws" id="ws3"><div class="wn">3</div>Calibrate Analysis</div>
+  <div class="ws" id="ws4"><div class="wn">4</div>CCTV CSV</div>
+  <div class="ws" id="ws5"><div class="wn">5</div>Calibrate CCTV</div>
+  <div class="ws" id="ws6"><div class="wn">6</div>Zones</div>
+  <div class="ws" id="ws7"><div class="wn">7</div>Replay</div>
+  <div class="ws" id="ws8"><div class="wn">8</div>Export</div>
+  <button id="nxt" onclick="nextStep()" disabled>NEXT →</button>
+</div>
+
+<div id="main">
+  <!-- Camera panel (left, narrow) -->
+  <div class="panel" id="cam-panel">
+    <div class="ph">
+      <span class="ptitle" id="cam-panel-title">Camera</span>
+      <div class="mbtns">
+        <div class="mb on" id="tab-img" onclick="setLeftMode('img')">Image</div>
+        <div class="mb"    id="tab-vid" onclick="setLeftMode('vid')">Video</div>
+        <div class="mb on" id="mb-cbbox" onclick="togCam('bbox')">BBox</div>
+      </div>
+    </div>
+    <div class="cwrap" id="lwrap">
+      <canvas id="lc"></canvas>
+      <video id="lv" muted playsinline preload="auto" style="display:none;max-width:100%;max-height:100%;object-fit:contain;background:#000"></video>
+      <div class="hint" id="lhint">Upload ref frame<br>(Step 5)</div>
+    </div>
+  </div>
+
+  <!-- Floor plan canvas -->
+  <div class="panel">
+    <div class="ph">
+      <span class="ptitle">Floor Plan</span>
+      <div class="mbtns">
+        <!-- Analysis layers -->
+        <div class="mb on"  id="mb-apt"  onclick="togL('apt')">Analysis</div>
+        <!-- CCTV layers -->
+        <div class="mb on"  id="mb-heat" onclick="togL('heat')">Heat</div>
+        <div class="mb on"  id="mb-trk"  onclick="togL('trk')">Tracks</div>
+        <div class="mb on"  id="mb-live" onclick="togL('live')">Live</div>
+        <!-- Common -->
+        <div class="mb on"  id="mb-bg"   onclick="togL('bg')">BG</div>
+        <div class="mb on"  id="mb-zon"  onclick="togL('zon')">Zones</div>
+        <div class="mb"     id="mb-zdraw" onclick="toggleZDraw()">Draw Zone</div>
+        <div class="mb"     onclick="undoZPt()">↩</div>
+        <div class="mb"     onclick="clearZDraft()">✕Draft</div>
+      </div>
+    </div>
+    <div class="cwrap" id="fwrap">
+      <canvas id="fc"></canvas>
+      <div class="hint" id="fhint">Load data and floor plan to begin</div>
+    </div>
+    <div id="legstrip">
+      <span class="legval" id="leg-min">—</span>
+      <canvas class="legbar" id="legbar-cv" width="200" height="7"></canvas>
+      <span class="legval" id="leg-max">—</span>
+      <span style="font-size:8px;color:var(--cyan);margin-left:6px;flex:1" id="leg-metric">no metric</span>
+      <div class="mb" onclick="savePNG()">Save PNG</div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+
+    <!-- Step 1: Analysis CSV -->
+    <div class="sb">
+      <div class="sbt">Step 1 — Space Analysis CSV</div>
+      <div class="upz" id="uz-acsv" onclick="document.getElementById('fi-acsv').click()">
+        <b>Analysis CSV</b>needs x, y + metrics
+      </div>
+      <input type="file" id="fi-acsv" accept=".csv" onchange="loadAnalysisCSV(this)">
+      <div style="font-size:8px;color:var(--muted);line-height:1.6;margin-top:2px" id="acsv-info">Awaiting…</div>
+    </div>
+
+    <!-- Step 2: Floor plan -->
+    <div class="sb">
+      <div class="sbt">Step 2 — Floor Plan</div>
+      <div class="upz" id="uz-floor" onclick="document.getElementById('fi-floor').click()">
+        <b>Floor plan image</b>PNG · JPG
+      </div>
+      <input type="file" id="fi-floor" accept="image/*" onchange="loadFloor(this)">
+    </div>
+
+    <!-- Step 3: Calibrate analysis -->
+    <div class="sb">
+      <div class="sbt">Step 3 — Calibrate Analysis</div>
+      <div style="font-size:8px;color:var(--muted);line-height:1.6;margin-bottom:4px" id="acal-status">No calibration yet</div>
+      <div class="frow"><label>Flip Y</label><input type="checkbox" id="aflip" checked onchange="recomputeA()"></div>
+      <button class="btn btn-c" onclick="openCalModal('analysis')">Open calibration window</button>
+      <button class="btn" onclick="clearACal()">Clear</button>
+    </div>
+
+    <!-- Analysis metric -->
+    <div class="sb">
+      <div class="sbt">Visualise Metric</div>
+      <div class="frow"><label>Metric</label>
+        <select id="metric-sel" onchange="setMetric(this.value)">
+          <option value="">— load CSV first —</option>
+        </select>
+      </div>
+      <div class="frow"><label>Colour map</label>
+        <select id="cmap-sel" onchange="scheduleRender()">
+          <option value="viridis">Viridis</option>
+          <option value="heat">Heat</option>
+          <option value="plasma">Plasma</option>
+          <option value="rdylgn">RdYlGn</option>
+        </select>
+      </div>
+      <div class="frow"><label>Pt size</label>
+        <input type="number" id="pt-size" value="2" min="1" max="20" onchange="scheduleRender()">
+      </div>
+      <div class="frow"><label>Opacity</label>
+        <input type="number" id="pt-op" value="0.85" min="0.05" max="1" step="0.05" onchange="scheduleRender()">
+      </div>
+    </div>
+
+    <!-- Step 4: CCTV CSV -->
+    <div class="sb">
+      <div class="sbt">Step 4 — CCTV CSV (optional)</div>
+      <div class="upz" id="uz-ccsv" onclick="document.getElementById('fi-ccsv').click()">
+        <b>YOLOv11 CSV</b>needs cx_norm, cy_norm
+      </div>
+      <input type="file" id="fi-ccsv" accept=".csv" onchange="loadCCTVCSV(this)">
+      <div style="font-size:8px;color:var(--muted);line-height:1.6;margin-top:2px" id="ccsv-info">Awaiting…</div>
+    </div>
+
+    <!-- Step 5: CCTV calibration -->
+    <div class="sb">
+      <div class="sbt">Step 5 — Calibrate CCTV</div>
+      <div class="upz" id="uz-ref" onclick="document.getElementById('fi-ref').click()">
+        <b>Camera reference frame</b>PNG · JPG screenshot
+      </div>
+      <input type="file" id="fi-ref" accept="image/*" onchange="loadRef(this)">
+      <div class="upz" id="uz-vid" onclick="document.getElementById('fi-vid').click()">
+        <b>Video (optional)</b>MP4 · MOV
+      </div>
+      <input type="file" id="fi-vid" accept="video/*" onchange="loadVid(this)">
+      <div style="font-size:8px;color:var(--muted);line-height:1.6;margin-top:2px" id="ccal-status">No calibration yet</div>
+      <div class="frow"><label>Flip Y</label><input type="checkbox" id="cflip" onchange="recomputeC()"></div>
+      <button class="btn btn-c" onclick="openCalModal('cctv')">Open calibration window</button>
+      <button class="btn" onclick="clearCCal()">Clear</button>
+    </div>
+
+    <!-- Step 6: Zones -->
+    <div class="sb">
+      <div class="sbt">Step 6 — Zones</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:8px;color:var(--muted)">Filter by type:</span>
+        <div class="mbtns" id="type-filter-btns">
+          <div class="mb on" data-type="all"      onclick="toggleTypeFilter('all')">All</div>
+          <div class="mb on" data-type="Private"  onclick="toggleTypeFilter('Private')" style="border-color:var(--purple);color:var(--purple)">Private</div>
+          <div class="mb on" data-type="Semi-public" onclick="toggleTypeFilter('Semi-public')" style="border-color:var(--amber);color:var(--amber)">Semi</div>
+          <div class="mb on" data-type="Public"   onclick="toggleTypeFilter('Public')" style="border-color:var(--cyan);color:var(--cyan)">Public</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:8px;color:var(--muted)">Saved zones</span>
+        <button id="btn-clr-zones" style="font-size:8px;padding:1px 6px;border-radius:3px;border:1px solid rgba(212,79,79,.35);background:transparent;color:var(--red);cursor:pointer;font-family:inherit">Clear all</button>
+      </div>
+      <div id="zone-panel">
+        <div style="font-size:8px;color:var(--muted);line-height:1.7">Draw zones on floor plan,<br>then assign a type.</div>
+      </div>
+    </div>
+
+    <!-- Live stats -->
+    <div class="sb">
+      <div class="sbt">Person Dwell</div>
+      <div id="plist"><div style="font-size:8px;color:var(--muted)">Load CCTV CSV first</div></div>
+      <div class="sbt" style="margin-top:6px">Zone Dwell</div>
+      <div id="zdwell"><div style="font-size:8px;color:var(--muted)">No zones yet</div></div>
+    </div>
+
+    <!-- Export -->
+    <div class="sb">
+      <div class="sbt">Step 8 — Export</div>
+      <button class="btn btn-g" onclick="exportAnalysisCSV()">Export Analysis CSV (+floor_x/y/zone/type)</button>
+      <button class="btn btn-p" onclick="exportCCTVCSV()">Export CCTV CSV (+floor_x/y/zone/type)</button>
+      <button class="btn" onclick="exportMergedCSV()" style="border-color:var(--amber);color:var(--amber)">Export Merged CSV (CCTV + analysis metrics)</button>
+      <button class="btn" onclick="savePNG()">Save Floor Plan PNG</button>
+      <button class="btn btn-r" onclick="resetAll()">Reset All</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Playback bar -->
+<div id="ctrlbar">
+  <div class="pbtn" onclick="togglePlay()"><div id="picon" class="tri"></div></div>
+  <div class="pbtn" onclick="stepFrame(-1)"><span style="font-size:9px;color:var(--text)">◀</span></div>
+  <div class="pbtn" onclick="stepFrame(1)"><span style="font-size:9px;color:var(--text)">▶</span></div>
+  <div class="tlt" id="tlt" onclick="seekClick(event)">
+    <div class="tlf" id="tlf" style="width:0%"></div>
+    <div class="tlth" id="tlth" style="left:0%"></div>
+  </div>
+  <span class="tslbl" id="tslbl">— / —</span>
+  <select class="spdsel" onchange="setSpeed(this.value)">
+    <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+    <option value="1" selected>1×</option><option value="2">2×</option>
+    <option value="4">4×</option><option value="8">8×</option>
+    <option value="16">16×</option><option value="32">32×</option>
+    <option value="64">64×</option><option value="100">100×</option>
+    <option value="200">200×</option><option value="500">500×</option>
+  </select>
+  <span style="font-size:8px;color:var(--muted);margin-left:4px">CCTV replay ↑</span>
+</div>
+
+<!-- CALIBRATION MODAL -->
+<div class="modal" id="cal-modal">
+ <div class="mbox">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div class="mh" id="cal-title">Calibration</div>
+    <span style="font-size:8px;color:var(--muted)">Click <b style="color:var(--text)">left first</b>, then <b style="color:var(--text)">floor plan</b></span>
+  </div>
+  <div class="md">Affine transform (independent X/Y scale + rotation + translation). Min <b>3 pairs</b>.</div>
+  <div class="cal-pair">
+    <div class="cal-side">
+      <div class="cal-lbl" id="cal-left-lbl">Left — click to add points</div>
+      <div class="cal-box" id="cal-lbox"><canvas id="cal-lc"></canvas></div>
+      <div style="font-size:8px;color:var(--muted)" id="cal-l-info">0 pts</div>
+    </div>
+    <div class="cal-side">
+      <div class="cal-lbl">Floor Plan — click matching position</div>
+      <div class="cal-box" id="cal-rbox"><canvas id="cal-rc"></canvas></div>
+      <div style="font-size:8px;color:var(--muted)" id="cal-r-info">0 pts</div>
+    </div>
+  </div>
+  <div style="font-size:9px;padding:4px 8px;background:var(--surf2);border-radius:3px;border:1px solid var(--bd)" id="cal-status-bar">Add ≥3 pairs.</div>
+  <div class="mbtns2">
+    <button class="btn btn-g" onclick="applyCalibration()" style="width:auto;margin:0">Apply</button>
+    <button class="btn" onclick="undoCalPair()" style="width:auto;margin:0">Undo pair</button>
+    <button class="btn" onclick="undoCalL()" style="width:auto;margin:0">Undo left</button>
+    <button class="btn" onclick="undoCalR()" style="width:auto;margin:0">Undo right</button>
+    <button class="btn" onclick="clearCal()" style="width:auto;margin:0">Clear</button>
+    <button class="btn btn-r" onclick="closeCal()" style="width:auto;margin:0">Cancel</button>
+  </div>
+ </div>
+</div>
+
+<!-- ZONE MODAL -->
+<div class="modal" id="zone-modal">
+ <div class="mbox sm">
+  <div class="mh">Name this zone</div>
+  <div class="mrow"><label>Name</label><input id="z-name" type="text" placeholder="e.g. Lab" maxlength="32"></div>
+  <div class="mrow"><label>Colour</label><input id="z-color" type="color" value="#2bbfb0" style="width:40px;height:22px;border:none;cursor:pointer;padding:0;background:none;flex:none"></div>
+  <div class="mrow"><label>Type</label>
+    <select id="z-type">
+      <option value="Private">Private</option>
+      <option value="Semi-public">Semi-public</option>
+      <option value="Public">Public</option>
+    </select>
+  </div>
+  <div class="mbtns2">
+    <button class="btn btn-g" onclick="confirmZone()" style="width:auto;margin:0">Save</button>
+    <button class="btn btn-r" onclick="cancelZone()" style="width:auto;margin:0">Discard</button>
+  </div>
+ </div>
+</div>
+
+<!-- PROGRESS -->
+<div id="prog">
+  <div id="prog-lbl">Loading…</div>
+  <div id="prog-track"><div id="prog-fill"></div></div>
+</div>
+
+<video id="lvid" muted playsinline preload="auto" style="display:none"></video>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+const PIDS  = ['AA01','AA02','AA03','AA04','AA05','AA06','AA07'];
+const PCOLS = ['#4c9fd4','#d4724c','#1fa876','#c46090','#7c6dcc','#b08820','#2bbfb0'];
+const CMAPS = {
+  viridis:[[68,1,84],[59,28,140],[33,102,172],[29,145,192],[65,182,196],[127,205,187],[199,233,180],[253,231,37]],
+  heat:   [[10,22,40],[26,95,165],[212,79,79],[253,231,37]],
+  plasma: [[13,8,135],[84,2,163],[139,10,165],[185,50,137],[219,92,104],[244,136,73],[254,188,43],[240,249,33]],
+  rdylgn: [[165,0,38],[215,48,39],[244,109,67],[253,174,97],[255,255,191],[166,217,106],[102,189,99],[26,152,80],[0,104,55]],
+};
+const PT_COLS=['#f87171','#60a5fa','#f59e0b','#34d399','#c084fc','#fb923c','#94a3b8','#f472b6','#a3e635','#38bdf8'];
+const TYPE_COLORS={Private:'#7c6dcc','Semi-public':'#d4961e',Public:'#2bbfb0'};
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+
+// Analysis data
+let aptX=null,aptY=null,aptMeta=null,aptHeaders=[],aptMetrics=[];
+let aptXMin,aptXMax,aptYMin,aptYMax;
+let aptFX=null,aptFY=null;   // mapped floor coords
+let aptRawLines=null;
+let aptAffine=null;          // fitted affine transform
+let aCalSrc=[],aCalDst=[];   // calibration pairs
+
+// Analysis render cache
+let aptCache=null;
+let activeMetric='';
+let renderPending=false;
+
+// Floor plan
+let floorImg=null;
+
+// CCTV data
+let cctvRows=[],cctvFrames=[],cctvStride=2.5;
+let cctvFX=null,cctvFY=null; // mapped floor coords (parallel to cctvRows)
+let cctvAffine=null;
+let cCalSrc=[],cCalDst=[];
+let refImg=null,refNW=1920,refNH=1080;
+let vidLoaded=false;
+const lvid=document.getElementById('lvid');
+
+// CCTV playback
+let frameIndex=0,playing=false,speed=1,playAccum=0;
+let heatPts=[],trackHistory={},personSecs={},zoneSecs={};
+let heatCache=null,lastHeatLen=0;
+let loopId=null,lastMs=null;
+
+// Zones
+let userZones=[],zoneDraft=[],zDrawOn=false,pendingZone=null;
+let activeTypeFilters=new Set(['all','Private','Semi-public','Public']);
+
+// Layers
+let showApt=true,showHeat=true,showTrk=true,showLive=true,showBG=true,showZon=true;
+
+// Calibration modal state
+let calTarget='analysis'; // 'analysis' | 'cctv'
+let calSrcCur=[],calDstCur=[];
+
+// Wizard
+let currentStep=1;
+let stepsComplete=new Set();
+
+// ═══════════════════════════════════════════════════════════════
+// CANVAS
+// ═══════════════════════════════════════════════════════════════
+const fc=document.getElementById('fc'),fx=fc.getContext('2d');
+
+function fitCanvas(){
+  const w=document.getElementById('fwrap');
+  const ww=w.clientWidth||800,wh=w.clientHeight||500;
+  if(!floorImg){fc.width=ww;fc.height=wh;return;}
+  const ar=floorImg.naturalWidth/floorImg.naturalHeight;
+  let cw,ch;
+  if(ww/wh>ar){ch=wh;cw=Math.round(ch*ar);}else{cw=ww;ch=Math.round(cw/ar);}
+  if(fc.width!==cw||fc.height!==ch){fc.width=cw;fc.height=ch;aptCache=null;heatCache=null;}
+}
+window.addEventListener('load',()=>{fitCanvas();fitLeftCanvas();});
+window.addEventListener('resize',()=>{fitCanvas();fitLeftCanvas();renderAll();});
+
+// ═══════════════════════════════════════════════════════════════
+// PROGRESS
+// ═══════════════════════════════════════════════════════════════
+function showProg(lbl,pct){
+  document.getElementById('prog').classList.add('show');
+  document.getElementById('prog-lbl').textContent=lbl;
+  document.getElementById('prog-fill').style.width=Math.round(pct)+'%';
+}
+function hideProg(){document.getElementById('prog').classList.remove('show');}
+
+// ═══════════════════════════════════════════════════════════════
+// ANALYSIS CSV LOAD
+// ═══════════════════════════════════════════════════════════════
+function loadAnalysisCSV(inp){
+  const file=inp.files[0];if(!file)return;
+  showProg('Reading analysis CSV…',5);setPill('p-busy','LOADING');
+  const reader=new FileReader();
+  reader.onload=e=>setTimeout(()=>parseAnalysisCSV(e.target.result,file.name),30);
+  reader.readAsText(file);
+}
+function parseAnalysisCSV(text,fname){
+  const lines=text.split('\n');
+  const hdr=lines[0].split(',').map(h=>h.replace(/"/g,'').trim());
+  const xi=hdr.indexOf('x'),yi=hdr.indexOf('y');
+  if(xi<0||yi<0){hideProg();alert('Analysis CSV needs x and y columns.');return;}
+  const mc=hdr.filter(h=>!['ref','x','y'].includes(h));
+  const n=lines.length-1;
+  const xA=new Float64Array(n),yA=new Float64Array(n);
+  const mA={};const mI={};
+  mc.forEach(c=>{mA[c]=new Float32Array(n);mI[c]=hdr.indexOf(c);});
+  let count=0,row=1;
+  let xMn=Infinity,xMx=-Infinity,yMn=Infinity,yMx=-Infinity;
+  const CHUNK=15000;
+  function step(){
+    const end=Math.min(row+CHUNK,lines.length);
+    for(;row<end;row++){
+      const line=lines[row];if(!line||!line.trim())continue;
+      const c=line.split(',');
+      const xv=parseFloat(c[xi]),yv=parseFloat(c[yi]);
+      if(isNaN(xv)||isNaN(yv))continue;
+      xA[count]=xv;yA[count]=yv;
+      if(xv<xMn)xMn=xv;if(xv>xMx)xMx=xv;
+      if(yv<yMn)yMn=yv;if(yv>yMx)yMx=yv;
+      mc.forEach(c2=>{mA[c2][count]=parseFloat(c[mI[c2]])||0;});
+      count++;
+    }
+    showProg('Parsing analysis… '+Math.round(row/lines.length*90+5)+'%',row/lines.length*90+5);
+    if(row<lines.length){setTimeout(step,0);return;}
+    setTimeout(()=>{
+      aptX=xA.slice(0,count);aptY=yA.slice(0,count);
+      aptMeta={};mc.forEach(c=>{aptMeta[c]=mA[c].slice(0,count);});
+      aptHeaders=hdr;aptMetrics=mc;
+      aptXMin=xMn;aptXMax=xMx;aptYMin=yMn;aptYMax=yMx;
+      aptRawLines=lines;
+      const sel=document.getElementById('metric-sel');
+      sel.innerHTML='<option value="">— select metric —</option>'+mc.map(m=>`<option value="${m}">${m}</option>`).join('');
+      document.getElementById('acsv-info').textContent=count.toLocaleString()+' pts · '+mc.length+' metrics';
+      document.getElementById('uz-acsv').className='upz ok';
+      document.getElementById('uz-acsv').innerHTML=`<b>${fname}</b>${count.toLocaleString()} pts`;
+      hideProg();setPill('p-ok','LOADED');mark(1);
+    },30);
+  }
+  step();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FLOOR PLAN
+// ═══════════════════════════════════════════════════════════════
+function loadFloor(inp){
+  const file=inp.files[0];if(!file)return;
+  const img=new Image();
+  img.onload=()=>{
+    floorImg=img;
+    document.getElementById('uz-floor').className='upz ok';
+    document.getElementById('uz-floor').innerHTML=`<b>${file.name}</b>${img.naturalWidth}×${img.naturalHeight}`;
+    document.getElementById('fhint').style.display='none';
+    fitCanvas();aptCache=null;heatCache=null;renderAll();mark(2);
+  };
+  img.src=URL.createObjectURL(file);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AFFINE TRANSFORM (shared by both calibrations)
+// ═══════════════════════════════════════════════════════════════
+function lsq3(rows,rhs){
+  let A00=0,A01=0,A02=0,A11=0,A12=0,A22=0,b0=0,b1=0,b2=0;
+  for(let i=0;i<rows.length;i++){
+    const[r0,r1,r2]=rows[i],y=rhs[i];
+    A00+=r0*r0;A01+=r0*r1;A02+=r0*r2;A11+=r1*r1;A12+=r1*r2;A22+=r2*r2;
+    b0+=r0*y;b1+=r1*y;b2+=r2*y;
+  }
+  const det=A00*(A11*A22-A12*A12)-A01*(A01*A22-A12*A02)+A02*(A01*A12-A11*A02);
+  if(Math.abs(det)<1e-14)return null;
+  return[
+    ((A11*A22-A12*A12)*b0-(A01*A22-A12*A02)*b1+(A01*A12-A11*A02)*b2)/det,
+    (-(A01*A22-A12*A02)*b0+(A00*A22-A02*A02)*b1-(A00*A12-A02*A01)*b2)/det,
+    ((A01*A12-A11*A02)*b0-(A00*A12-A02*A01)*b1+(A00*A11-A01*A01)*b2)/det
+  ];
+}
+function fitAffine(src,dst){
+  const n=Math.min(src.length,dst.length);
+  if(n<3)return null;
+  const rows=src.slice(0,n).map(p=>[p[0],p[1],1]);
+  const px=lsq3(rows,dst.slice(0,n).map(p=>p[0]));
+  const py=lsq3(rows,dst.slice(0,n).map(p=>p[1]));
+  if(!px||!py)return null;
+  const[a,b,tx]=px,[c,d,ty]=py;
+  const sx=Math.sqrt(a*a+c*c),sy=Math.sqrt(b*b+d*d);
+  const angle=Math.atan2(c,a)*180/Math.PI;
+  let sumErr=0;
+  for(let i=0;i<n;i++){
+    const nx=src[i][0],ny=src[i][1];
+    sumErr+=Math.sqrt((a*nx+b*ny+tx-dst[i][0])**2+(c*nx+d*ny+ty-dst[i][1])**2);
+  }
+  return{a,b,c,d,tx,ty,sx,sy,angle,err:(sumErr/n*1000).toFixed(1),n};
+}
+function applyAffine(T,nx,ny){
+  if(!T)return[nx,ny];
+  return[T.a*nx+T.b*ny+T.tx, T.c*nx+T.d*ny+T.ty];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ANALYSIS CALIBRATION
+// ═══════════════════════════════════════════════════════════════
+function aNorm(x,y){
+  const flip=document.getElementById('aflip').checked;
+  const nx=(x-aptXMin)/(aptXMax-aptXMin||1);
+  const ny=(y-aptYMin)/(aptYMax-aptYMin||1);
+  return[nx,flip?1-ny:ny];
+}
+function computeAptCoords(){
+  if(!aptX)return;
+  aptAffine=fitAffine(aCalSrc,aCalDst);
+  const n=aptX.length;
+  aptFX=new Float32Array(n);aptFY=new Float32Array(n);
+  for(let i=0;i<n;i++){
+    const[nx,ny]=aNorm(aptX[i],aptY[i]);
+    const[fx,fy]=applyAffine(aptAffine,nx,ny);
+    aptFX[i]=Math.max(-0.5,Math.min(1.5,fx));
+    aptFY[i]=Math.max(-0.5,Math.min(1.5,fy));
+  }
+  aptCache=null;
+  const ok=aptAffine!==null;
+  document.getElementById('acal-status').textContent=ok
+    ?`✓ ${aptAffine.n} pairs · sx=${aptAffine.sx.toFixed(3)} sy=${aptAffine.sy.toFixed(3)} rot=${aptAffine.angle.toFixed(1)}° err=${aptAffine.err}‰`
+    :'Calibration not applied (need ≥3 pairs)';
+  if(ok)mark(3);
+  checkNext();
+}
+function recomputeA(){if(aCalSrc.length>=3)computeAptCoords();}
+function clearACal(){aCalSrc=[];aCalDst=[];aptAffine=null;aptFX=null;aptFY=null;aptCache=null;document.getElementById('acal-status').textContent='No calibration yet';checkNext();renderAll();}
+
+// ═══════════════════════════════════════════════════════════════
+// CCTV CSV LOAD
+// ═══════════════════════════════════════════════════════════════
+function loadCCTVCSV(inp){
+  const file=inp.files[0];if(!file)return;
+  showProg('Reading CCTV CSV…',5);
+  const reader=new FileReader();
+  reader.onload=e=>setTimeout(()=>parseCCTVCSV(e.target.result,file.name),30);
+  reader.readAsText(file);
+}
+function parseCCTVCSV(text,fname){
+  const lines=text.split('\n').filter(l=>l.trim());
+  const hdr=lines[0].split(',').map(h=>h.replace(/"/g,'').trim());
+  const fi=k=>hdr.indexOf(k);
+  const req=['cx_norm','cy_norm','person_id','frame','time_sec'];
+  const miss=req.filter(k=>fi(k)<0);
+  if(miss.length){hideProg();alert('CCTV CSV missing: '+miss.join(', '));return;}
+  cctvRows=lines.slice(1).map(l=>{
+    const c=l.split(',').map(v=>v.replace(/"/g,'').trim());
+    return{frame:+c[fi('frame')]||0,time_sec:parseFloat(c[fi('time_sec')])||0,
+      datetime:c[fi('datetime')]||'',camera:c[fi('camera')]||'C1',
+      track_id:c[fi('track_id')]||'',person_id:c[fi('person_id')]||'',
+      x1:parseFloat(c[fi('x1')])||0,y1:parseFloat(c[fi('y1')])||0,
+      x2:parseFloat(c[fi('x2')])||0,y2:parseFloat(c[fi('y2')])||0,
+      cx_norm:parseFloat(c[fi('cx_norm')])||0,cy_norm:parseFloat(c[fi('cy_norm')])||0,
+      confidence:parseFloat(c[fi('confidence')])||0};
+  }).filter(r=>!isNaN(r.time_sec));
+  const seen=new Set();cctvFrames=[];
+  cctvRows.forEach(r=>{if(!seen.has(r.time_sec)){seen.add(r.time_sec);cctvFrames.push(r.time_sec);}});
+  cctvFrames.sort((a,b)=>a-b);
+  if(cctvFrames.length>1){
+    const diffs=cctvFrames.slice(1).map((t,i)=>t-cctvFrames[i]).sort((a,b)=>a-b);
+    cctvStride=diffs[Math.floor(diffs.length/2)];
+  }
+  computeCCTVCoords();
+  document.getElementById('ccsv-info').textContent=cctvRows.length.toLocaleString()+' rows · '+cctvFrames.length+' frames';
+  document.getElementById('uz-ccsv').className='upz ok';
+  document.getElementById('uz-ccsv').innerHTML=`<b>${fname}</b>${cctvRows.length.toLocaleString()} rows`;
+  hideProg();mark(4);checkNext();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CCTV CALIBRATION
+// ═══════════════════════════════════════════════════════════════
+function loadRef(inp){
+  const file=inp.files[0];if(!file)return;
+  const img=new Image();
+  img.onload=()=>{
+    refImg=img;refNW=img.naturalWidth;refNH=img.naturalHeight;
+    document.getElementById('uz-ref').className='upz ok';
+    document.getElementById('uz-ref').innerHTML=`<b>${file.name}</b>${img.naturalWidth}×${img.naturalHeight}`;
+    document.getElementById('lhint').style.display='none';
+    setLeftMode('img');fitLeftCanvas();
+  };
+  img.src=URL.createObjectURL(file);
+}
+function loadVid(inp){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>600*1024*1024&&!confirm('Large file ('+Math.round(file.size/1024/1024)+'MB). Continue?'))return;
+  // Wire to both the hidden lvid (for sync) and the visible lv2
+  const url=URL.createObjectURL(file);
+  lvid.src=url;lv2.src=url;
+  lvid.onloadedmetadata=()=>{
+    vidLoaded=true;
+    if(!refImg){refNW=lvid.videoWidth;refNH=lvid.videoHeight;}
+    document.getElementById('uz-vid').className='upz ok';
+    document.getElementById('uz-vid').innerHTML=`<b>${file.name}</b>${fmtSec(lvid.duration)}`;
+    document.getElementById('lhint').style.display='none';
+    setLeftMode('vid');
+  };
+}
+function cNorm(nx,ny){
+  // cx_norm/cy_norm are already [0,1] in camera frame
+  const flip=document.getElementById('cflip').checked;
+  return[nx,flip?1-ny:ny];
+}
+function computeCCTVCoords(){
+  if(!cctvRows.length)return;
+  cctvAffine=fitAffine(cCalSrc,cCalDst);
+  cctvFX=new Float32Array(cctvRows.length);
+  cctvFY=new Float32Array(cctvRows.length);
+  cctvRows.forEach((r,i)=>{
+    const[nx,ny]=cNorm(r.cx_norm,r.cy_norm);
+    const[fx,fy]=applyAffine(cctvAffine,nx,ny);
+    cctvFX[i]=Math.max(-0.5,Math.min(1.5,fx));
+    cctvFY[i]=Math.max(-0.5,Math.min(1.5,fy));
+  });
+  heatCache=null;
+  const ok=cctvAffine!==null;
+  document.getElementById('ccal-status').textContent=ok
+    ?`✓ ${cctvAffine.n} pairs · sx=${cctvAffine.sx.toFixed(3)} sy=${cctvAffine.sy.toFixed(3)} rot=${cctvAffine.angle.toFixed(1)}° err=${cctvAffine.err}‰`
+    :'Not calibrated (need ≥3 pairs)';
+  if(ok)mark(5);checkNext();
+}
+function recomputeC(){if(cCalSrc.length>=3)computeCCTVCoords();}
+function clearCCal(){cCalSrc=[];cCalDst=[];cctvAffine=null;cctvFX=null;cctvFY=null;heatCache=null;document.getElementById('ccal-status').textContent='No calibration yet';checkNext();renderAll();}
+
+// ═══════════════════════════════════════════════════════════════
+// CALIBRATION MODAL (shared)
+// ═══════════════════════════════════════════════════════════════
+function openCalModal(target){
+  calTarget=target;
+  if(target==='analysis'&&!aptX){alert('Load analysis CSV first.');return;}
+  if(target==='cctv'&&!cctvRows.length){alert('Load CCTV CSV first.');return;}
+  if(!floorImg){alert('Load floor plan first.');return;}
+  calSrcCur=target==='analysis'?aCalSrc.map(p=>[...p]):cCalSrc.map(p=>[...p]);
+  calDstCur=target==='analysis'?aCalDst.map(p=>[...p]):cCalDst.map(p=>[...p]);
+  document.getElementById('cal-title').textContent=target==='analysis'?'Calibrate — Analysis ↔ Floor Plan':'Calibrate — CCTV ↔ Floor Plan';
+  document.getElementById('cal-left-lbl').textContent=target==='analysis'?'Point Cloud — click to add points':'Camera Reference Frame — click to add points';
+  document.getElementById('cal-modal').style.display='block';
+  setTimeout(()=>{sizeCalCanvases();renderCalCanvases();setupCalClicks();},50);
+}
+function closeCal(){document.getElementById('cal-modal').style.display='none';}
+
+function sizeCalCanvases(){
+  const lcv=document.getElementById('cal-lc'),rcv=document.getElementById('cal-rc');
+  const W=Math.min(380,Math.floor((window.innerWidth-80)/2));
+  // Left canvas
+  if(calTarget==='analysis'){
+    const ar=(aptXMax-aptXMin)/(aptYMax-aptYMin||1);
+    lcv.width=W;lcv.height=Math.max(180,Math.min(300,Math.round(W/ar)));
+  } else {
+    if(refImg){const ar=refImg.naturalWidth/refImg.naturalHeight;lcv.width=W;lcv.height=Math.max(180,Math.min(300,Math.round(W/ar)));}
+    else{lcv.width=W;lcv.height=240;}
+  }
+  // Right: floor plan
+  const far=floorImg.naturalWidth/floorImg.naturalHeight;
+  rcv.width=W;rcv.height=Math.max(180,Math.min(300,Math.round(W/far)));
+}
+
+function renderCalCanvases(){
+  const lcv=document.getElementById('cal-lc'),rcv=document.getElementById('cal-rc');
+  const lctx=lcv.getContext('2d'),rctx=rcv.getContext('2d');
+  // Left
+  lctx.fillStyle='#03050d';lctx.fillRect(0,0,lcv.width,lcv.height);
+  if(calTarget==='analysis'){
+    renderCloudThumb(lcv,lctx);
+  } else {
+    if(refImg){try{lctx.drawImage(refImg,0,0,lcv.width,lcv.height);}catch(e){}}
+    else{lctx.fillStyle='rgba(70,90,120,.4)';lctx.font='9px monospace';lctx.textAlign='center';lctx.fillText('Upload ref frame first',lcv.width/2,lcv.height/2);}
+  }
+  calSrcCur.forEach((p,i)=>drawCalDot(lctx,p[0]*lcv.width,p[1]*lcv.height,i));
+  // Right
+  rctx.fillStyle='#03050d';rctx.fillRect(0,0,rcv.width,rcv.height);
+  try{rctx.drawImage(floorImg,0,0,rcv.width,rcv.height);}catch(e){}
+  calDstCur.forEach((p,i)=>drawCalDot(rctx,p[0]*rcv.width,p[1]*rcv.height,i));
+  // Status
+  const n=Math.min(calSrcCur.length,calDstCur.length);
+  const ok=n>=3&&calSrcCur.length===calDstCur.length;
+  let statusTxt;
+  if(ok){
+    const T=fitAffine(calSrcCur,calDstCur);
+    statusTxt=T?`<span style="color:var(--green)">✓ ${n} pairs · sx=${T.sx.toFixed(3)} sy=${T.sy.toFixed(3)} rot=${T.angle.toFixed(1)}° err=${T.err}‰ — click Apply</span>`:'Singular — try different points';
+  } else if(calSrcCur.length!==calDstCur.length){
+    statusTxt=`<span style="color:var(--amber)">Unbalanced: ${calSrcCur.length} left · ${calDstCur.length} right</span>`;
+  } else {
+    statusTxt=`Click left image first, then matching floor plan position. Need ≥3 pairs.`;
+  }
+  document.getElementById('cal-l-info').textContent=calSrcCur.length+' pts'+(calSrcCur.length>=3?' ✓':'');
+  document.getElementById('cal-r-info').textContent=calDstCur.length+' pts'+(calDstCur.length>=3?' ✓':'');
+  document.getElementById('cal-status-bar').innerHTML=statusTxt;
+}
+
+function renderCloudThumb(cv,ctx){
+  if(!aptX)return;
+  const W=cv.width,H=cv.height;
+  const flip=document.getElementById('aflip').checked;
+  const step=Math.max(1,Math.floor(aptX.length/40000));
+  const imgd=ctx.createImageData(W,H);const d=imgd.data;
+  for(let i=0;i<aptX.length;i+=step){
+    const nx=(aptX[i]-aptXMin)/(aptXMax-aptXMin||1);
+    const ny=flip?1-(aptY[i]-aptYMin)/(aptYMax-aptYMin||1):(aptY[i]-aptYMin)/(aptYMax-aptYMin||1);
+    const px=Math.round(nx*W),py=Math.round(ny*H);
+    if(px<0||px>=W||py<0||py>=H)continue;
+    const idx=(py*W+px)*4;d[idx]=100;d[idx+1]=160;d[idx+2]=210;d[idx+3]=180;
+  }
+  ctx.putImageData(imgd,0,0);
+}
+
+function drawCalDot(ctx,x,y,i){
+  const col=PT_COLS[i%PT_COLS.length];
+  ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fillStyle=col+'cc';ctx.fill();
+  ctx.strokeStyle='white';ctx.lineWidth=1;ctx.stroke();
+  ctx.fillStyle='white';ctx.font='bold 7px monospace';ctx.textAlign='center';ctx.fillText(i+1,x,y+2.5);
+}
+
+function setupCalClicks(){
+  const lcv=document.getElementById('cal-lc'),rcv=document.getElementById('cal-rc');
+  lcv.onclick=e=>{
+    const r=lcv.getBoundingClientRect();
+    calSrcCur.push([(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]);
+    renderCalCanvases();
+  };
+  rcv.onclick=e=>{
+    if(calDstCur.length>=calSrcCur.length){alert('Add left point first.');return;}
+    const r=rcv.getBoundingClientRect();
+    calDstCur.push([(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]);
+    renderCalCanvases();
+  };
+}
+
+function applyCalibration(){
+  const n=Math.min(calSrcCur.length,calDstCur.length);
+  if(n<3){alert('Need ≥3 matched pairs.');return;}
+  if(calSrcCur.length!==calDstCur.length){alert('Unbalanced pairs. Use Undo to fix.');return;}
+  if(calTarget==='analysis'){
+    aCalSrc=calSrcCur.map(p=>[...p]);aCalDst=calDstCur.map(p=>[...p]);
+    computeAptCoords();scheduleRender();
+  } else {
+    cCalSrc=calSrcCur.map(p=>[...p]);cCalDst=calDstCur.map(p=>[...p]);
+    computeCCTVCoords();heatCache=null;
+  }
+  closeCal();renderAll();
+}
+
+function undoCalPair(){
+  if(calSrcCur.length>calDstCur.length)calSrcCur.pop();
+  else if(calDstCur.length>calSrcCur.length)calDstCur.pop();
+  else if(calSrcCur.length>0){calSrcCur.pop();calDstCur.pop();}
+  renderCalCanvases();
+}
+function undoCalL(){if(calSrcCur.length>0){calSrcCur.pop();renderCalCanvases();}}
+function undoCalR(){if(calDstCur.length>0){calDstCur.pop();renderCalCanvases();}}
+function clearCal(){calSrcCur=[];calDstCur=[];renderCalCanvases();}
+
+// ═══════════════════════════════════════════════════════════════
+// COLOUR MAPS
+// ═══════════════════════════════════════════════════════════════
+function cmapColor(t,name){
+  const stops=CMAPS[name]||CMAPS.viridis;
+  t=Math.max(0,Math.min(1,t));
+  const seg=(stops.length-1)*t,i=Math.min(Math.floor(seg),stops.length-2),f=seg-i;
+  const a=stops[i],b=stops[i+1];
+  return[Math.round(a[0]+(b[0]-a[0])*f),Math.round(a[1]+(b[1]-a[1])*f),Math.round(a[2]+(b[2]-a[2])*f)];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ANALYSIS POINT RENDER
+// ═══════════════════════════════════════════════════════════════
+function setMetric(v){activeMetric=v;scheduleRender();}
+function scheduleRender(){
+  if(renderPending)return;renderPending=true;
+  requestAnimationFrame(()=>{renderPending=false;buildAptCache();renderAll();});
+}
+
+function buildAptCache(){
+  if(!aptX||!aptFX||!activeMetric||!aptMeta[activeMetric])return;
+  const W=fc.width,H=fc.height;if(!W||!H)return;
+  const vals=aptMeta[activeMetric];
+  const n=vals.length;
+  let mn=Infinity,mx=-Infinity;
+  for(let i=0;i<n;i++){if(vals[i]<mn)mn=vals[i];if(vals[i]>mx)mx=vals[i];}
+  const rng=mx-mn||1;
+  document.getElementById('leg-min').textContent=mn.toFixed(3);
+  document.getElementById('leg-max').textContent=mx.toFixed(3);
+  document.getElementById('leg-metric').textContent=activeMetric;
+  renderLegend();
+  const ptSize=Math.max(1,parseInt(document.getElementById('pt-size').value)||2);
+  const opacity=parseFloat(document.getElementById('pt-op').value)||0.85;
+  const cmap=document.getElementById('cmap-sel').value||'viridis';
+  const off=document.createElement('canvas');off.width=W;off.height=H;
+  const oc=off.getContext('2d');
+  if(ptSize<=2){
+    const imgd=oc.createImageData(W,H);const d=imgd.data;const al=Math.round(opacity*255);
+    const r2=ptSize===2;
+    for(let i=0;i<n;i++){
+      const t=(vals[i]-mn)/rng;const[r,g,b]=cmapColor(t,cmap);
+      const px=Math.round(aptFX[i]*W),py=Math.round(aptFY[i]*H);
+      if(px<0||px>=W||py<0||py>=H)continue;
+      let idx=(py*W+px)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;d[idx+3]=al;
+      if(r2){
+        if(px+1<W){const i2=(py*W+px+1)*4;d[i2]=r;d[i2+1]=g;d[i2+2]=b;d[i2+3]=al;}
+        if(py+1<H){const i3=((py+1)*W+px)*4;d[i3]=r;d[i3+1]=g;d[i3+2]=b;d[i3+3]=al;}
+      }
+    }
+    oc.putImageData(imgd,0,0);
+  } else {
+    const B=256,bkts=Array.from({length:B},()=>[]);
+    for(let i=0;i<n;i++)bkts[Math.min(B-1,Math.round((vals[i]-mn)/rng*(B-1)))].push(i);
+    const rad=ptSize/2;
+    bkts.forEach((ids,bi)=>{
+      if(!ids.length)return;
+      const[r,g,b]=cmapColor(bi/(B-1),cmap);
+      oc.fillStyle=`rgba(${r},${g},${b},${opacity})`;
+      oc.beginPath();ids.forEach(i=>{oc.moveTo(aptFX[i]*W+rad,aptFY[i]*H);oc.arc(aptFX[i]*W,aptFY[i]*H,rad,0,Math.PI*2);});
+      oc.fill();
+    });
+  }
+  aptCache=off;
+}
+
+function renderLegend(){
+  const cv=document.getElementById('legbar-cv'),ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height,cmap=document.getElementById('cmap-sel').value||'viridis';
+  const imgd=ctx.createImageData(W,H);const d=imgd.data;
+  for(let x=0;x<W;x++){const[r,g,b]=cmapColor(x/W,cmap);for(let y=0;y<H;y++){const idx=(y*W+x)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;d[idx+3]=220;}}
+  ctx.putImageData(imgd,0,0);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HEATMAP (CCTV)
+// ═══════════════════════════════════════════════════════════════
+function hexRgb(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
+function gradCol(t){
+  const s=[{pos:0,color:'#0a1628'},{pos:.3,color:'#1a5fa5'},{pos:.65,color:'#d44f4f'},{pos:1,color:'#ffdd00'}];
+  if(t<=s[0].pos)return hexRgb(s[0].color);
+  if(t>=s[s.length-1].pos)return hexRgb(s[s.length-1].color);
+  for(let i=0;i<s.length-1;i++){
+    if(t>=s[i].pos&&t<=s[i+1].pos){
+      const f=(t-s[i].pos)/(s[i+1].pos-s[i].pos),a=hexRgb(s[i].color),b=hexRgb(s[i+1].color);
+      return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f];
+    }
+  }
+  return[0,0,0];
+}
+function buildHeat(){
+  const W=fc.width,H=fc.height,R=Math.max(4,Math.round(W*0.05));
+  const den=new Float32Array(W*H);
+  heatPts.forEach(p=>{
+    const cx=Math.round(p[0]*W),cy=Math.round(p[1]*H);
+    for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
+      const d2=dx*dx+dy*dy;if(d2>R*R)continue;
+      const ix=cx+dx,iy=cy+dy;if(ix<0||ix>=W||iy<0||iy>=H)continue;
+      den[iy*W+ix]+=(1-Math.sqrt(d2)/R);
+    }
+  });
+  let mx=0;for(let i=0;i<den.length;i++)if(den[i]>mx)mx=den[i];
+  if(!mx)return null;
+  const off=document.createElement('canvas');off.width=W;off.height=H;
+  const oc=off.getContext('2d'),img=oc.createImageData(W,H),d=img.data;
+  for(let i=0;i<den.length;i++){
+    const v=den[i]/mx;if(v<0.01)continue;
+    const[r,g,b]=gradCol(v);d[i*4]=r;d[i*4+1]=g;d[i*4+2]=b;d[i*4+3]=Math.round(v*.78*255);
+  }
+  oc.putImageData(img,0,0);return off;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN DRAW
+// ═══════════════════════════════════════════════════════════════
+function renderAll(){
+  const W=fc.width,H=fc.height;if(!W||!H)return;
+  fx.clearRect(0,0,W,H);
+  if(!floorImg){fx.fillStyle='#0a0d18';fx.fillRect(0,0,W,H);}
+  else if(showBG){fx.drawImage(floorImg,0,0,W,H);}
+
+  // Analysis points
+  if(showApt&&aptCache)fx.drawImage(aptCache,0,0);
+
+  // CCTV heatmap
+  if(showHeat&&heatPts.length>3){
+    if(heatPts.length!==lastHeatLen){heatCache=buildHeat();lastHeatLen=heatPts.length;}
+    if(heatCache)fx.drawImage(heatCache,0,0);
+  }
+
+  // Zones (filtered by type)
+  if(showZon)drawZones();
+
+  // CCTV tracks
+  if(showTrk)drawTracks();
+
+  // CCTV live dots
+  if(showLive)drawLive();
+
+  // Zone draft
+  drawDraft();
+}
+
+function isZoneVisible(z){
+  if(activeTypeFilters.has('all'))return true;
+  return activeTypeFilters.has(z.type||'Public');
+}
+
+function drawZones(){
+  const W=fc.width,H=fc.height;
+  userZones.forEach(z=>{
+    if(!isZoneVisible(z))return;
+    if(z.pts.length<2)return;
+    fx.beginPath();fx.moveTo(z.pts[0][0]*W,z.pts[0][1]*H);
+    for(let i=1;i<z.pts.length;i++)fx.lineTo(z.pts[i][0]*W,z.pts[i][1]*H);
+    if(z.closed)fx.closePath();
+    fx.fillStyle=z.color+'28';fx.fill();
+    fx.strokeStyle=z.color+'cc';fx.lineWidth=1.5;fx.stroke();
+    const cx=z.pts.reduce((s,p)=>s+p[0],0)/z.pts.length*W;
+    const cy=z.pts.reduce((s,p)=>s+p[1],0)/z.pts.length*H;
+    fx.fillStyle=z.color;fx.font='bold 8px monospace';fx.textAlign='center';
+    fx.fillText(z.name,cx,cy-4);
+    fx.font='7px monospace';fx.fillStyle=z.color+'bb';
+    fx.fillText(z.type||'',cx,cy+6);
+  });
+}
+
+function drawTracks(){
+  const W=fc.width,H=fc.height;
+  Object.entries(trackHistory).forEach(([pid,pts])=>{
+    if(pts.length<2)return;
+    fx.beginPath();fx.moveTo(pts[0][0]*W,pts[0][1]*H);
+    for(let i=1;i<pts.length;i++)fx.lineTo(pts[i][0]*W,pts[i][1]*H);
+    fx.strokeStyle=pidCol(pid)+'99';fx.lineWidth=1.4;fx.stroke();
+  });
+}
+
+function drawLive(){
+  if(!cctvFX||!cctvFrames.length)return;
+  const W=fc.width,H=fc.height;
+  const rows=rowsAt(currentT());
+  rows.forEach((r,ri)=>{
+    const i=cctvRows.indexOf(r);if(i<0)return;
+    const col=pidCol(r.person_id);
+    const cx=cctvFX[i]*W,cy=cctvFY[i]*H;
+    fx.beginPath();fx.arc(cx,cy,6,0,Math.PI*2);fx.fillStyle=col;fx.fill();
+    fx.beginPath();fx.arc(cx,cy,10,0,Math.PI*2);fx.strokeStyle=col+'44';fx.lineWidth=1.2;fx.stroke();
+    fx.fillStyle='white';fx.font='bold 6px monospace';fx.textAlign='center';fx.fillText(r.person_id,cx,cy+2);
+  });
+}
+
+function drawDraft(){
+  if(!zDrawOn||!zoneDraft.length)return;
+  const W=fc.width,H=fc.height;
+  fx.beginPath();fx.moveTo(zoneDraft[0][0]*W,zoneDraft[0][1]*H);
+  for(let i=1;i<zoneDraft.length;i++)fx.lineTo(zoneDraft[i][0]*W,zoneDraft[i][1]*H);
+  fx.strokeStyle='rgba(255,255,255,.5)';fx.lineWidth=1.2;fx.setLineDash([4,3]);fx.stroke();fx.setLineDash([]);
+  zoneDraft.forEach((p,i)=>{fx.beginPath();fx.arc(p[0]*W,p[1]*H,3,0,Math.PI*2);fx.fillStyle=i===0?'#e09b25':'white';fx.fill();});
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CCTV PLAYBACK HELPERS
+// ═══════════════════════════════════════════════════════════════
+function currentT(){return cctvFrames.length?cctvFrames[Math.min(frameIndex,cctvFrames.length-1)]:0;}
+function totalT(){return cctvFrames.length?cctvFrames[cctvFrames.length-1]:0;}
+function rowsAt(t){
+  if(!cctvFrames.length)return[];
+  const half=cctvStride*0.6;
+  return cctvRows.filter(r=>Math.abs(r.time_sec-t)<half);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PLAYBACK LOOP
+// ═══════════════════════════════════════════════════════════════
+function startLoop(){
+  if(loopId)cancelAnimationFrame(loopId);
+  lastMs=null;
+  function tick(ms){
+    const dt=lastMs!==null?Math.min((ms-lastMs)/1000,.2):0;
+    lastMs=ms;
+    if(playing&&cctvFrames.length){
+      playAccum+=dt*speed;
+      while(playAccum>=cctvStride&&frameIndex<cctvFrames.length-1){
+        playAccum-=cctvStride;frameIndex++;accumulate();
+        if(vidLoaded)syncVideo(currentT());
+      }
+      if(frameIndex>=cctvFrames.length-1){setPlaying(false);playAccum=0;}
+    }
+    drawCamera();renderAll();updateUI();
+    loopId=requestAnimationFrame(tick);
+  }
+  loopId=requestAnimationFrame(tick);
+}
+
+function accumulate(){
+  if(!cctvFX||!cctvFrames.length)return;
+  const rows=rowsAt(currentT());
+  const seenP=new Set(),seenZ=new Set();
+  rows.forEach((r,_)=>{
+    const i=cctvRows.indexOf(r);if(i<0)return;
+    const fx2=cctvFX[i],fy2=cctvFY[i];
+    heatPts.push([fx2,fy2]);if(heatPts.length>12000)heatPts.shift();heatCache=null;
+    if(!trackHistory[r.person_id])trackHistory[r.person_id]=[];
+    const th=trackHistory[r.person_id],last=th[th.length-1];
+    if(!last||Math.hypot(fx2-last[0],fy2-last[1])>0.002){th.push([+fx2.toFixed(4),+fy2.toFixed(4)]);if(th.length>600)th.shift();}
+    if(!seenP.has(r.person_id)){seenP.add(r.person_id);personSecs[r.person_id]=(personSecs[r.person_id]||0)+cctvStride;}
+    const zi=zoneOf(fx2,fy2);
+    if(zi>=0&&!seenZ.has(zi)){seenZ.add(zi);zoneSecs[zi]=(zoneSecs[zi]||0)+cctvStride;}
+  });
+}
+
+function syncVideo(t){
+  if(!vidLoaded)return;
+  if(Math.abs(lvid.currentTime-t)>0.3){lvid.currentTime=t;lv2.currentTime=t;}
+}
+
+function setPlaying(v){
+  playing=v;
+  const ic=document.getElementById('picon');
+  if(v){ic.className='brs';ic.innerHTML='<div class="br"></div><div class="br"></div>';setPill('p-play','● PLAYING');if(vidLoaded){const vspd=Math.min(speed,16);lvid.playbackRate=vspd;lv2.playbackRate=vspd;lvid.play().catch(()=>{});lv2.play().catch(()=>{});}}
+  else{ic.className='tri';ic.innerHTML='';setPill('p-ok','READY');if(vidLoaded){lvid.pause();lv2.pause();}}
+}
+function togglePlay(){
+  if(!cctvFrames.length){alert('Load CCTV CSV first.');return;}
+  if(frameIndex>=cctvFrames.length-1&&!playing){frameIndex=0;resetAccum();}
+  setPlaying(!playing);mark(7);
+}
+function stepFrame(dir){
+  if(!cctvFrames.length)return;setPlaying(false);
+  const prev=frameIndex;
+  frameIndex=Math.max(0,Math.min(cctvFrames.length-1,frameIndex+dir));
+  if(frameIndex!==prev&&dir>0)accumulate();
+  if(vidLoaded)syncVideo(currentT());
+}
+function seekClick(e){
+  if(!cctvFrames.length)return;
+  const r=document.getElementById('tlt').getBoundingClientRect();
+  const ti=Math.round((e.clientX-r.left)/r.width*(cctvFrames.length-1));
+  if(ti<frameIndex){heatPts=[];heatCache=null;trackHistory={};personSecs={};zoneSecs={};}
+  frameIndex=Math.max(0,Math.min(cctvFrames.length-1,ti));
+  playAccum=0;if(vidLoaded)syncVideo(currentT());
+}
+function setSpeed(v){speed=parseFloat(v);if(vidLoaded&&playing)lvid.playbackRate=Math.min(speed,16);}
+function resetAccum(){heatPts=[];heatCache=null;lastHeatLen=0;trackHistory={};personSecs={};zoneSecs={};playAccum=0;}
+
+// ═══════════════════════════════════════════════════════════════
+// UI UPDATE
+// ═══════════════════════════════════════════════════════════════
+function updateUI(){
+  const t=currentT(),dur=totalT(),pct=dur>0?Math.min(t/dur*100,100):0;
+  document.getElementById('tlf').style.width=pct.toFixed(1)+'%';
+  document.getElementById('tlth').style.left=pct.toFixed(1)+'%';
+  document.getElementById('tslbl').textContent=fmtSec(t)+' / '+fmtSec(dur);
+  const rows=rowsAt(t);
+  document.getElementById('ts-disp').textContent=rows[0]?.datetime||fmtSec(t);
+
+  // Person dwell
+  const persons=[...new Set(cctvRows.map(r=>r.person_id))].filter(p=>p&&p!=='Noise'&&p!=='Skip');
+  const mxP=Math.max(...persons.map(p=>personSecs[p]||0),1);
+  document.getElementById('plist').innerHTML=persons.length?persons.map(pid=>{
+    const s=personSecs[pid]||0,p2=Math.round(s/mxP*100),col=pidCol(pid);
+    return`<div class="prow">
+      <div class="pdot" style="background:${col}${s>0?'':'55'}"></div>
+      <span class="pnm">${pid}</span>
+      <div class="bb"><div class="bf" style="width:${p2}%;background:${col}"></div></div>
+      <span class="bv">${s>0?fmtSec(s):'—'}</span>
+      <span style="font-size:8px;color:${col};width:7px">${rows.some(r=>r.person_id===pid)?'●':''}</span>
+    </div>`;
+  }).join(''):'<div style="font-size:8px;color:var(--muted)">Load CCTV CSV first</div>';
+
+  // Zone dwell
+  const visZ=userZones.filter(isZoneVisible);
+  document.getElementById('zdwell').innerHTML=visZ.length?(()=>{
+    const mxZ=Math.max(...userZones.map((_,i)=>zoneSecs[i]||0),1);
+    return visZ.map(z=>{
+      const i=userZones.indexOf(z);
+      const s=zoneSecs[i]||0,p3=Math.round(s/mxZ*100);
+      const tc=TYPE_COLORS[z.type||'Public']||'var(--cyan)';
+      return`<div class="prow">
+        <div class="pdot" style="background:${z.color}"></div>
+        <span class="pnm" style="width:50px;color:${z.color}">${z.name}</span>
+        <span style="font-size:7px;color:${tc};width:40px">${z.type||''}</span>
+        <div class="bb"><div class="bf" style="width:${p3}%;background:${z.color}"></div></div>
+        <span class="bv">${s>0?fmtSec(s):'0s'}</span>
+      </div>`;
+    }).join('');
+  })():'<div style="font-size:8px;color:var(--muted)">Draw zones (Step 6)</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LAYER TOGGLES
+// ═══════════════════════════════════════════════════════════════
+function togL(m){
+  const map={apt:[showApt,'mb-apt'],heat:[showHeat,'mb-heat'],trk:[showTrk,'mb-trk'],
+             live:[showLive,'mb-live'],bg:[showBG,'mb-bg'],zon:[showZon,'mb-zon']};
+  if(m==='apt'){showApt=!showApt;document.getElementById('mb-apt').className='mb'+(showApt?' on':'');}
+  if(m==='heat'){showHeat=!showHeat;document.getElementById('mb-heat').className='mb'+(showHeat?' on':'');}
+  if(m==='trk'){showTrk=!showTrk;document.getElementById('mb-trk').className='mb'+(showTrk?' on':'');}
+  if(m==='live'){showLive=!showLive;document.getElementById('mb-live').className='mb'+(showLive?' on':'');}
+  if(m==='bg'){showBG=!showBG;document.getElementById('mb-bg').className='mb'+(showBG?' on':'');}
+  if(m==='zon'){showZon=!showZon;document.getElementById('mb-zon').className='mb'+(showZon?' on':'');}
+  renderAll();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ZONE TYPE FILTER
+// ═══════════════════════════════════════════════════════════════
+function toggleTypeFilter(type){
+  if(type==='all'){
+    const allOn=activeTypeFilters.has('all');
+    if(allOn){activeTypeFilters.clear();}
+    else{activeTypeFilters=new Set(['all','Private','Semi-public','Public']);}
+  } else {
+    activeTypeFilters.delete('all');
+    if(activeTypeFilters.has(type))activeTypeFilters.delete(type);
+    else activeTypeFilters.add(type);
+    if(activeTypeFilters.size===3)activeTypeFilters.add('all');
+  }
+  // Update button states
+  document.querySelectorAll('#type-filter-btns .mb').forEach(btn=>{
+    const t=btn.getAttribute('data-type');
+    btn.className='mb'+(activeTypeFilters.has(t)?' on':'');
+  });
+  renderAll();updateUI();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ZONE DRAWING
+// ═══════════════════════════════════════════════════════════════
+function toggleZDraw(){
+  zDrawOn=!zDrawOn;
+  const btn=document.getElementById('mb-zdraw');
+  btn.className='mb'+(zDrawOn?' on-p':'');
+  btn.textContent=zDrawOn?'Drawing…':'Draw Zone';
+  fc.style.cursor=zDrawOn?'crosshair':'default';
+  if(!zDrawOn)zoneDraft=[];
+}
+fc.addEventListener('click',e=>{
+  if(!zDrawOn)return;
+  const cr=fc.getBoundingClientRect();
+  const nx=(e.clientX-cr.left)/cr.width,ny=(e.clientY-cr.top)/cr.height;
+  if(zoneDraft.length>=3){
+    const fp=zoneDraft[0];
+    if(Math.hypot((nx-fp[0])*fc.width,(ny-fp[1])*fc.height)<14){
+      pendingZone={pts:zoneDraft.slice(),closed:true};zoneDraft=[];openZoneModal();return;
+    }
+  }
+  zoneDraft.push([nx,ny]);renderAll();
+});
+fc.addEventListener('dblclick',e=>{
+  if(!zDrawOn||zoneDraft.length<2)return;
+  e.preventDefault();pendingZone={pts:zoneDraft.slice(),closed:false};zoneDraft=[];openZoneModal();
+});
+function openZoneModal(){
+  document.getElementById('z-name').value='';
+  document.getElementById('zone-modal').style.display='block';
+  setTimeout(()=>document.getElementById('z-name').focus(),50);
+}
+function confirmZone(){
+  const name=document.getElementById('z-name').value.trim()||'Zone '+(userZones.length+1);
+  const color=document.getElementById('z-color').value;
+  const type=document.getElementById('z-type').value;
+  if(pendingZone){userZones.push({...pendingZone,name,color,type});pendingZone=null;}
+  document.getElementById('zone-modal').style.display='none';
+  renderZonePanel();renderAll();mark(6);checkNext();
+}
+function cancelZone(){pendingZone=null;document.getElementById('zone-modal').style.display='none';}
+document.getElementById('z-name').addEventListener('keydown',e=>{if(e.key==='Enter')confirmZone();if(e.key==='Escape')cancelZone();});
+function undoZPt(){if(zoneDraft.length>0){zoneDraft.pop();renderAll();}}
+function clearZDraft(){zoneDraft=[];if(zDrawOn)toggleZDraw();renderAll();}
+
+// zoneOf: respects current visibility filter (used for live display)
+function zoneOf(x,y){
+  for(let i=0;i<userZones.length;i++){
+    if(!isZoneVisible(userZones[i]))continue;
+    const z=userZones[i];if(!z.closed)continue;
+    const p=z.pts;let ins=false;
+    for(let a=0,b=p.length-1;a<p.length;b=a++){
+      if(((p[a][1]>y)!==(p[b][1]>y))&&(x<(p[b][0]-p[a][0])*(y-p[a][1])/(p[b][1]-p[a][1])+p[a][0]))ins=!ins;
+    }
+    if(ins)return i;
+  }
+  return -1;
+}
+// zoneOfAll: ignores filter (used for export — always assigns zone regardless of type filter)
+function zoneOfAll(x,y){
+  for(let i=0;i<userZones.length;i++){
+    const z=userZones[i];if(!z.closed)continue;
+    const p=z.pts;let ins=false;
+    for(let a=0,b=p.length-1;a<p.length;b=a++){
+      if(((p[a][1]>y)!==(p[b][1]>y))&&(x<(p[b][0]-p[a][0])*(y-p[a][1])/(p[b][1]-p[a][1])+p[a][0]))ins=!ins;
+    }
+    if(ins)return i;
+  }
+  return -1;
+}
+
+function deleteZone(i){
+  if(!confirm('Delete zone "'+userZones[i].name+'"?'))return;
+  userZones.splice(i,1);
+  const nz={};Object.entries(zoneSecs).forEach(([k,v])=>{const ki=+k;if(ki<i)nz[ki]=v;else if(ki>i)nz[ki-1]=v;});
+  zoneSecs=nz;renderZonePanel();renderAll();
+}
+
+function renderZonePanel(){
+  const p=document.getElementById('zone-panel');
+  if(!userZones.length){p.innerHTML='<div style="font-size:8px;color:var(--muted);line-height:1.7">Draw zones on floor plan,<br>then assign a type.</div>';return;}
+  p.innerHTML=userZones.map((z,i)=>{
+    const tc=TYPE_COLORS[z.type||'Public']||'var(--cyan)';
+    return`<div style="display:flex;align-items:center;gap:4px;padding:3px 5px;background:var(--surf2);border-radius:3px;margin-bottom:2px">
+      <div style="width:7px;height:7px;border-radius:50%;background:${z.color};flex-shrink:0"></div>
+      <span style="font-size:9px;color:${z.color};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${z.name}</span>
+      <span style="font-size:7px;padding:1px 5px;border-radius:6px;border:1px solid ${tc};color:${tc}">${z.type||''}</span>
+      <button data-del="${i}" style="font-size:10px;border:none;background:transparent;color:var(--muted);cursor:pointer;padding:0 2px">✕</button>
+    </div>`;
+  }).join('');
+}
+document.getElementById('zone-panel').addEventListener('click',function(e){
+  const btn=e.target.closest('[data-del]');if(!btn)return;deleteZone(+btn.dataset.del);
+});
+document.getElementById('btn-clr-zones').addEventListener('click',function(){
+  if(!userZones.length)return;if(!confirm('Delete ALL zones?'))return;userZones=[];zoneSecs={};renderZonePanel();renderAll();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════
+function exportAnalysisCSV(){
+  if(!aptX){alert('No analysis CSV loaded.');return;}
+  if(!aptAffine){alert('Apply analysis calibration first.');return;}
+  showProg('Writing analysis CSV…',50);
+  setTimeout(()=>{
+    // Re-run zoneOf for every point (uses current zone state, not cached)
+    const hdr=[...aptHeaders,'floor_x','floor_y','zone','zone_type'].join(',');
+    const rows=[];
+    for(let i=0;i<aptX.length;i++){
+      const zi=zoneOfAll(aptFX[i],aptFY[i]); // use all zones regardless of filter
+      const zoneName=zi>=0?userZones[zi].name:'';
+      const zoneType=zi>=0?(userZones[zi].type||''):'';
+      const line=aptRawLines[i+1]?.trim()||'';
+      rows.push(`${line},${aptFX[i].toFixed(5)},${aptFY[i].toFixed(5)},${zoneName},${zoneType}`);
+    }
+    dl([hdr,...rows].join('\n'),'analysis_mapped.csv','text/csv');
+    hideProg();mark(8);setPill('p-ok','EXPORTED');
+  },50);
+}
+
+function exportCCTVCSV(){
+  if(!cctvRows.length){alert('No CCTV CSV loaded.');return;}
+  if(!cctvAffine){alert('Apply CCTV calibration first.');return;}
+  showProg('Writing CCTV CSV…',50);
+  setTimeout(()=>{
+    const extraCols=['floor_x','floor_y','zone','zone_type'];
+    const origHdr=Object.keys(cctvRows[0]).filter(k=>!['floor_x','floor_y','zone','zone_type'].includes(k));
+    const hdr=[...origHdr,...extraCols].join(',');
+    const rows=cctvRows.map((r,i)=>{
+      const zi=zoneOfAll(cctvFX[i],cctvFY[i]);
+      const base=origHdr.map(k=>r[k]??'').join(',');
+      return`${base},${cctvFX[i].toFixed(5)},${cctvFY[i].toFixed(5)},${zi>=0?userZones[zi].name:''},${zi>=0?(userZones[zi].type||''):''}`;
+    });
+    dl([hdr,...rows].join('\n'),'cctv_mapped.csv','text/csv');
+    hideProg();mark(8);setPill('p-ok','EXPORTED');
+  },50);
+}
+
+function savePNG(){
+  if(!floorImg){alert('No floor plan loaded.');return;}
+  fc.toBlob(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`spatial_studio_${activeMetric||'overlay'}.png`;a.click();},'image/png');
+}
+
+// ── Merged export: CCTV rows + nearest analysis point metrics ────────────────
+function exportMergedCSV(){
+  if(!cctvRows.length){alert('No CCTV CSV loaded.');return;}
+  if(!cctvAffine){alert('Apply CCTV calibration first.');return;}
+  if(!aptX){alert('No analysis CSV loaded.');return;}
+  if(!aptAffine){alert('Apply analysis calibration first.');return;}
+
+  showProg('Building KD-tree for nearest-neighbour lookup…',10);
+  setTimeout(()=>{
+    // For each CCTV row, find nearest analysis point (brute force, chunked)
+    // Build analysis point arrays once
+    const AN=aptX.length;
+    const afx=aptFX, afy=aptFY;
+
+    const origHdr=Object.keys(cctvRows[0]);
+    const extraCols=['floor_x','floor_y','zone','zone_type',...aptMetrics];
+    const hdr=[...origHdr,...extraCols].join(',');
+    const outRows=[];
+    const CN=cctvRows.length;
+    let ci=0;
+    const CHUNK=2000;
+
+    function step(){
+      const end=Math.min(ci+CHUNK,CN);
+      for(;ci<end;ci++){
+        const r=cctvRows[ci];
+        const fx=cctvFX[ci], fy=cctvFY[ci];
+        const zi=zoneOfAll(fx,fy);
+
+        // Find nearest analysis point
+        let bestDist=Infinity, bestIdx=0;
+        for(let ai=0;ai<AN;ai++){
+          const d=(afx[ai]-fx)**2+(afy[ai]-fy)**2;
+          if(d<bestDist){bestDist=d;bestIdx=ai;}
+        }
+
+        const base=origHdr.map(k=>r[k]??'').join(',');
+        const zoneName=zi>=0?userZones[zi].name:'';
+        const zoneType=zi>=0?(userZones[zi].type||''):'';
+        const metrics=aptMetrics.map(m=>aptMeta[m]?aptMeta[m][bestIdx].toFixed(4):'').join(',');
+        outRows.push(`${base},${fx.toFixed(5)},${fy.toFixed(5)},${zoneName},${zoneType},${metrics}`);
+      }
+      const pct=Math.round(ci/CN*90)+5;
+      showProg(`Merging… ${pct}% (${ci.toLocaleString()} / ${CN.toLocaleString()} rows)`, pct);
+      if(ci<CN){setTimeout(step,0);return;}
+      dl([hdr,...outRows].join('\n'),'merged_cctv_analysis.csv','text/csv');
+      hideProg();mark(8);setPill('p-ok','EXPORTED');
+    }
+    step();
+  },50);
+}
+
+// ── Camera panel JS ──────────────────────────────────────────────────────────
+const lc2=document.getElementById('lc');
+const lv2=document.getElementById('lv');
+let leftMode2='img';
+let showCBBox=true;
+
+function setLeftMode(mode){
+  leftMode2=mode;
+  document.getElementById('tab-img').className='mb'+(mode==='img'?' on':'');
+  document.getElementById('tab-vid').className='mb'+(mode==='vid'?' on':'');
+  lc2.style.display=mode==='img'?'block':'none';
+  lv2.style.display=mode==='vid'&&vidLoaded?'block':'none';
+  document.getElementById('lhint').style.display=(mode==='img'&&!refImg)?'':'none';
+}
+
+function togCam(m){
+  if(m==='bbox'){showCBBox=!showCBBox;document.getElementById('mb-cbbox').className='mb'+(showCBBox?' on':'');}
+}
+
+function fitLeftCanvas(){
+  if(!refImg){lc2.width=260;lc2.height=200;return;}
+  // Use natural image size — camera panel scrolls if image is large
+  const nw=refImg.naturalWidth, nh=refImg.naturalHeight;
+  // Cap at 2x to avoid huge images filling screen, but keep AR exact
+  const maxW=Math.min(nw,window.innerWidth*0.35);
+  const scale=maxW/nw;
+  const cw=Math.round(nw*scale), ch=Math.round(nh*scale);
+  if(lc2.width!==cw||lc2.height!==ch){lc2.width=cw;lc2.height=ch;}
+}
+
+function drawCamera(){
+  const W=lc2.width,H=lc2.height;if(!W||!H)return;
+  const ctx=lc2.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  if(leftMode2==='vid'&&vidLoaded){
+    lc2.style.display='block';
+    // overlay canvas on video for bboxes
+    const vr=lv2.getBoundingClientRect(),lr=document.getElementById('lwrap').getBoundingClientRect();
+    const vw=Math.round(vr.width),vh=Math.round(vr.height);
+    if(lc2.width!==vw||lc2.height!==vh){lc2.width=vw;lc2.height=vh;}
+    lc2.style.position='absolute';
+    lc2.style.left=Math.round(vr.left-lr.left)+'px';
+    lc2.style.top=Math.round(vr.top-lr.top)+'px';
+  } else {
+    lc2.style.position='relative';
+    lc2.style.left='';lc2.style.top='';
+    if(refImg){
+      // Canvas is already sized to image AR — draw 1:1
+      ctx.drawImage(refImg,0,0,W,H);
+      ctx.fillStyle='rgba(0,0,0,.10)';ctx.fillRect(0,0,W,H);
+    }else{ctx.fillStyle='#03050d';ctx.fillRect(0,0,W,H);}
+  }
+  // BBox overlay
+  if(showCBBox&&cctvFX&&cctvFrames.length){
+    const t=currentT(),half=cctvStride*0.6;
+    const rows=cctvRows.filter(r=>Math.abs(r.time_sec-t)<half);
+    const scx=W/refNW,scy=H/refNH;
+    rows.forEach(r=>{
+      const col=pidCol(r.person_id);
+      const bx=r.x1*scx,by=r.y1*scy,bw=(r.x2-r.x1)*scx,bh=(r.y2-r.y1)*scy;
+      ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.strokeRect(bx,by,bw,bh);
+      ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(bx,by-12,Math.max(bw,52),11);
+      ctx.fillStyle=col;ctx.font='bold 7px monospace';ctx.textAlign='center';
+      ctx.fillText(r.person_id,bx+bw/2,by-3);
+    });
+  }
+  // Timestamp
+  const rows2=cctvFrames.length?cctvRows.filter(r=>Math.abs(r.time_sec-currentT())<cctvStride*0.6):[];
+  const ts=rows2[0]?.datetime||fmtSec(currentT());
+  ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(4,4,140,12);
+  ctx.fillStyle='rgba(180,210,240,.9)';ctx.font='7px monospace';ctx.textAlign='left';
+  ctx.fillText(ts,7,13);
+}
+function dl(content,name,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();}
+
+// ═══════════════════════════════════════════════════════════════
+// WIZARD
+// ═══════════════════════════════════════════════════════════════
+function mark(n){stepsComplete.add(n);renderWiz();checkNext();}
+function renderWiz(){
+  for(let i=1;i<=8;i++){
+    const el=document.getElementById('ws'+i);
+    el.className='ws'+(stepsComplete.has(i)?' done':i===currentStep?' active':'');
+  }
+}
+function stepReady(n){
+  if(n===1)return !!aptX;
+  if(n===2)return !!floorImg;
+  if(n===3)return !!aptAffine;
+  if(n===4)return cctvRows.length>0;
+  if(n===5)return !!cctvAffine;
+  if(n===6)return userZones.length>0;
+  if(n===7)return cctvFrames.length>0;
+  return true;
+}
+function checkNext(){
+  const btn=document.getElementById('nxt');
+  btn.disabled=!stepReady(currentStep);
+  if(currentStep===8){btn.textContent='Export ↓';btn.onclick=exportAnalysisCSV;}
+  else{btn.textContent='NEXT →';btn.onclick=nextStep;}
+  for(let i=1;i<=8;i++)if(stepReady(i))stepsComplete.add(i);
+  renderWiz();
+}
+function nextStep(){
+  if(!stepReady(currentStep)){
+    const h={
+      1:'Load the space analysis CSV first.',
+      2:'Upload a floor plan image first.',
+      3:'Open the analysis calibration window and add ≥3 pairs, then Apply.',
+      4:'Load the CCTV CSV (or skip to Step 6 for analysis-only).',
+      5:'Open the CCTV calibration window and add ≥3 pairs, then Apply.',
+      6:'Draw and save at least one zone first.',
+      7:'CCTV data is needed for replay.',
+    };
+    if(h[currentStep])alert(h[currentStep]);
+    return;
+  }
+  stepsComplete.add(currentStep);
+  if(currentStep<8){
+    currentStep++;
+    if(currentStep===7&&!playing&&cctvFrames.length){frameIndex=0;resetAccum();setPlaying(true);}
+  }
+  renderWiz();checkNext();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RESET + HELPERS
+// ═══════════════════════════════════════════════════════════════
+function resetAll(){
+  if(!confirm('Reset everything?'))return;
+  aptX=aptY=aptMeta=aptFX=aptFY=aptRawLines=aptAffine=null;
+  aptHeaders=[];aptMetrics=[];aCalSrc=[];aCalDst=[];activeMetric='';aptCache=null;
+  floorImg=null;
+  cctvRows=[];cctvFrames=[];cctvFX=cctvFY=cctvAffine=null;
+  cCalSrc=[];cCalDst=[];refImg=null;vidLoaded=false;lvid.src='';
+  resetAccum();heatCache=null;frameIndex=0;
+  userZones=[];zoneDraft=[];pendingZone=null;
+  activeTypeFilters=new Set(['all','Private','Semi-public','Public']);
+  stepsComplete=new Set();currentStep=1;
+  setPlaying(false);setPill('p-idle','IDLE');
+  ['uz-acsv','uz-floor','uz-ccsv','uz-ref','uz-vid'].forEach(id=>{
+    const el=document.getElementById(id);if(!el)return;el.className='upz';
+    const labels={'uz-acsv':'<b>Analysis CSV</b>needs x, y + metrics',
+      'uz-floor':'<b>Floor plan image</b>PNG · JPG',
+      'uz-ccsv':'<b>YOLOv11 CSV</b>needs cx_norm, cy_norm',
+      'uz-ref':'<b>Camera reference frame</b>PNG · JPG screenshot',
+      'uz-vid':'<b>Video (optional)</b>MP4 · MOV'};
+    el.innerHTML=labels[id]||id;
+  });
+  document.getElementById('acsv-info').textContent='Awaiting…';
+  document.getElementById('ccsv-info').textContent='Awaiting…';
+  document.getElementById('acal-status').textContent='No calibration yet';
+  document.getElementById('ccal-status').textContent='No calibration yet';
+  document.getElementById('metric-sel').innerHTML='<option value="">— load CSV first —</option>';
+  document.getElementById('fhint').style.display='';
+  document.querySelectorAll('#type-filter-btns .mb').forEach(btn=>btn.className='mb on');
+  renderZonePanel();renderWiz();checkNext();fitCanvas();renderAll();
+}
+
+function pidCol(pid){const i=PIDS.indexOf(pid);return i>=0?PCOLS[i]:(pid?PCOLS[Math.abs(hash(pid))%PCOLS.length]:'#6b7280');}
+function hash(s){let h=0;for(let i=0;i<s.length;i++)h=Math.imul(31,h)+s.charCodeAt(i)|0;return h;}
+function fmtSec(s){s=Math.max(0,s||0);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=Math.floor(s%60);return h?`${h}h ${m}m ${ss}s`:m?`${m}m ${ss}s`:`${ss}s`;}
+function setPill(cls,txt){const p=document.getElementById('pill');p.className='pill '+cls;p.textContent=txt;}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+renderWiz();checkNext();renderAll();startLoop();
+</script>
+</body>
+</html>

@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Space Analysis Mapper</title>
+<style>
+:root{
+  --bg:#080b12;--surf:#0e1220;--surf2:#141826;--surf3:#1a1f30;
+  --bd:rgba(255,255,255,.06);--bd2:rgba(255,255,255,.12);
+  --text:#cdd5e8;--muted:#4a5568;
+  --cyan:#2bbfb0;--green:#1fa876;--red:#d44f4f;--amber:#d4961e;--purple:#7c6dcc;--blue:#4c9fd4;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono',ui-monospace,Consolas,monospace;font-size:11px;display:flex;flex-direction:column}
+
+#topbar{display:flex;align-items:center;gap:10px;padding:0 14px;height:38px;background:var(--surf);border-bottom:1px solid var(--bd);flex-shrink:0}
+.logo{font-size:11px;font-weight:700;color:#c8d4f0}.logo em{color:var(--cyan);font-style:normal}
+.pill{font-size:9px;padding:1px 8px;border-radius:10px;border:1px solid;font-weight:600;white-space:nowrap}
+.p-idle{color:var(--muted);border-color:var(--muted)}
+.p-ok{color:var(--green);border-color:var(--green)}
+.p-busy{color:var(--amber);border-color:var(--amber);animation:blink .8s infinite}
+
+#wizbar{display:flex;align-items:stretch;background:var(--surf2);border-bottom:1px solid var(--bd);flex-shrink:0;height:34px}
+.wstep{display:flex;align-items:center;gap:6px;padding:0 12px;font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);border-right:1px solid var(--bd);white-space:nowrap;position:relative}
+.wstep::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:transparent}
+.wstep.active{color:var(--cyan);background:rgba(43,191,176,.04)}.wstep.active::after{background:var(--cyan)}
+.wstep.done{color:var(--green)}.wstep.done::after{background:var(--green)}
+.wnum{width:15px;height:15px;border-radius:50%;border:1px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;flex-shrink:0}
+#next-btn{margin-left:auto;margin-right:10px;align-self:center;font-size:10px;font-weight:700;padding:4px 18px;border-radius:5px;border:1px solid var(--cyan);background:rgba(43,191,176,.13);color:var(--cyan);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+#next-btn:hover:not(:disabled){background:rgba(43,191,176,.25)}
+#next-btn:disabled{opacity:.28;cursor:not-allowed}
+
+#main{display:grid;grid-template-columns:1fr 300px;gap:1px;background:var(--bd);flex:1;min-height:0}
+.panel{background:var(--bg);display:flex;flex-direction:column;min-height:0}
+.ph{display:flex;align-items:center;justify-content:space-between;padding:5px 10px;background:var(--surf);border-bottom:1px solid var(--bd);flex-shrink:0;gap:6px;flex-wrap:wrap}
+.ptitle{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.cwrap{position:relative;flex:1;min-height:0;background:#03050d;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.cwrap canvas{display:block;max-width:100%;max-height:100%}
+.hint{position:absolute;font-size:10px;color:var(--muted);text-align:center;pointer-events:none;line-height:1.8}
+
+#sidebar{display:flex;flex-direction:column;gap:1px;background:var(--bd);overflow-y:auto}
+.sb{background:var(--bg);padding:8px 10px;flex-shrink:0}
+.sbt{font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid var(--bd)}
+.upz{border:1px dashed rgba(255,255,255,.09);border-radius:5px;padding:7px 9px;text-align:center;cursor:pointer;color:var(--muted);font-size:10px;line-height:1.8;transition:all .2s;margin-bottom:5px}
+.upz:hover{border-color:var(--blue);color:var(--blue)}
+.upz.ok{border-color:var(--green);color:var(--green);border-style:solid}
+.upz b{display:block;font-size:10px;font-weight:700;margin-bottom:1px}
+input[type=file]{display:none}
+
+.frow{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.frow label{font-size:9px;color:var(--muted);width:84px;flex-shrink:0}
+.frow input[type=number],.frow select{flex:1;font-size:10px;background:var(--surf3);color:var(--text);border:1px solid var(--bd2);border-radius:3px;padding:2px 5px;font-family:inherit;min-width:0}
+.frow input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:var(--cyan)}
+
+.btn{display:block;font-size:10px;padding:5px 9px;border-radius:4px;border:1px solid var(--bd2);background:var(--surf2);color:var(--text);cursor:pointer;width:100%;margin-top:4px;text-align:center;font-family:inherit}
+.btn:hover{border-color:var(--blue);color:var(--blue)}
+.btn-g{background:var(--green);color:#fff;border-color:var(--green)}.btn-g:hover{background:#178f62}
+.btn-p{background:var(--purple);color:#fff;border-color:var(--purple)}.btn-p:hover{background:#6457b0}
+.btn-r{color:var(--red);border-color:rgba(212,79,79,.3)}.btn-r:hover{background:rgba(212,79,79,.08)}
+.btn-cyan{background:var(--cyan);color:#000;border-color:var(--cyan)}.btn-cyan:hover{background:#22a89a}
+
+.mbtns{display:flex;gap:3px;flex-wrap:wrap}
+.mb{font-size:9px;padding:1px 7px;border-radius:3px;border:1px solid var(--bd2);color:var(--muted);cursor:pointer;background:transparent;white-space:nowrap;font-family:inherit}
+.mb:hover{border-color:var(--text);color:var(--text)}
+.mb.on{border-color:var(--cyan);color:var(--cyan);background:rgba(43,191,176,.08)}
+.mb.on-p{border-color:var(--purple);color:var(--purple);background:rgba(124,109,204,.1)}
+
+#legstrip{display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--surf);border-top:1px solid var(--bd);flex-shrink:0;flex-wrap:wrap}
+.legbar{flex:1;min-width:60px;height:8px;border-radius:3px}
+.legval{font-size:9px;color:var(--muted);white-space:nowrap}
+
+/* Progress overlay */
+#prog-overlay{display:none;position:fixed;inset:0;background:rgba(4,6,14,.88);z-index:400;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+#prog-overlay.show{display:flex}
+#prog-track{width:300px;height:6px;background:var(--surf3);border-radius:3px;overflow:hidden}
+#prog-fill{height:100%;background:var(--cyan);border-radius:3px;width:0%;transition:width .15s}
+#prog-lbl{font-size:10px;color:var(--muted)}
+
+.modal{display:none;position:fixed;inset:0;background:rgba(4,6,14,.94);z-index:200;overflow-y:auto;padding:24px 14px}
+.mbox{max-width:400px;margin:0 auto;background:var(--surf);border:1px solid var(--bd2);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.mh{font-size:12px;font-weight:700;color:#dde2f0}
+.mrow{display:flex;align-items:center;gap:8px}
+.mrow label{font-size:10px;color:var(--muted);flex-shrink:0;width:70px}
+.mrow input{flex:1;font-size:10px;background:var(--surf3);color:var(--text);border:1px solid var(--bd2);border-radius:3px;padding:3px 6px;font-family:inherit}
+.mbtns{display:flex;gap:7px;flex-wrap:wrap}.mbtns .btn{width:auto;margin:0}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <span class="logo">Space <em>Analysis</em> Mapper</span>
+  <span class="pill p-idle" id="pill">IDLE</span>
+  <span id="top-info" style="font-size:9px;color:var(--muted);margin-left:4px"></span>
+</div>
+
+<div id="wizbar">
+  <div class="wstep active" id="ws1"><div class="wnum">1</div>Load CSV</div>
+  <div class="wstep" id="ws2"><div class="wnum">2</div>Floor Plan</div>
+  <div class="wstep" id="ws3"><div class="wnum">3</div>Align</div>
+  <div class="wstep" id="ws4"><div class="wnum">4</div>Draw Zones</div>
+  <div class="wstep" id="ws5"><div class="wnum">5</div>Export</div>
+  <button id="next-btn" onclick="nextStep()" disabled>NEXT →</button>
+</div>
+
+<div id="main">
+
+  <div class="panel">
+    <div class="ph">
+      <span class="ptitle">Floor Plan</span>
+      <div class="mbtns">
+        <div class="mb on" id="mb-pts"   onclick="togL('pts')">Points</div>
+        <div class="mb on" id="mb-bg"    onclick="togL('bg')">BG</div>
+        <div class="mb on" id="mb-zones" onclick="togL('zones')">Zones</div>
+        <div class="mb"    id="mb-zdraw" onclick="toggleZoneDraw()">Draw Zone</div>
+        <div class="mb"    onclick="undoZonePt()">↩ Pt</div>
+        <div class="mb"    onclick="clearZoneDraft()">✕ Draft</div>
+      </div>
+    </div>
+    <div class="cwrap" id="fwrap">
+      <canvas id="fc"></canvas>
+      <div class="hint" id="fhint">Load CSV and floor plan to begin</div>
+    </div>
+    <div id="legstrip">
+      <span class="legval" id="leg-min">—</span>
+      <canvas class="legbar" id="legbar-cv" width="200" height="8"></canvas>
+      <span class="legval" id="leg-max">—</span>
+      <span style="font-size:9px;color:var(--cyan);margin-left:8px;flex:1" id="leg-metric">no metric selected</span>
+      <div class="mb" onclick="savePNG()">Save PNG</div>
+    </div>
+  </div>
+
+  <div id="sidebar">
+
+    <div class="sb">
+      <div class="sbt">Step 1 — Space Analysis CSV</div>
+      <div class="upz" id="uz-csv" onclick="document.getElementById('fi-csv').click()">
+        <b>Analysis CSV</b>needs x and y columns
+      </div>
+      <input type="file" id="fi-csv" accept=".csv" onchange="loadCSV(this)">
+      <div style="font-size:9px;color:var(--muted);line-height:1.7;margin-top:3px" id="csv-info">Awaiting CSV…</div>
+    </div>
+
+    <div class="sb">
+      <div class="sbt">Step 2 — Floor Plan Image</div>
+      <div class="upz" id="uz-floor" onclick="document.getElementById('fi-floor').click()">
+        <b>Floor plan</b>PNG · JPG
+      </div>
+      <input type="file" id="fi-floor" accept="image/*" onchange="loadFloor(this)">
+    </div>
+
+    <div class="sb">
+      <div class="sbt">Step 3 — Calibrate</div>
+      <div style="font-size:9px;color:var(--muted);line-height:1.6;margin-bottom:6px">
+        Click matching points on the <b style="color:var(--text)">point cloud</b> (left) and the <b style="color:var(--text)">floor plan</b> (right) to build the mapping. Needs ≥ 4 pairs.
+      </div>
+      <div id="cal-status-sb" style="font-size:9px;color:var(--muted);margin-bottom:5px">No calibration yet</div>
+      <div class="frow"><label>Flip Y axis</label><input type="checkbox" id="b-flipy" checked onchange="recomputeIfReady()"></div>
+      <button class="btn btn-cyan" onclick="openCalModal()">Open calibration window</button>
+      <button class="btn" onclick="clearCalibration()">Clear calibration</button>
+    </div>
+
+    <div class="sb">
+      <div class="sbt">Visualise Metric</div>
+      <div class="frow"><label>Metric</label>
+        <select id="metric-sel" onchange="setMetric(this.value)">
+          <option value="">— select after loading CSV —</option>
+        </select>
+      </div>
+      <div class="frow"><label>Colour map</label>
+        <select id="cmap-sel" onchange="scheduleRender()">
+          <option value="viridis">Viridis</option>
+          <option value="heat">Heat (blue→red→yellow)</option>
+          <option value="plasma">Plasma</option>
+          <option value="rdylgn">RdYlGn</option>
+        </select>
+      </div>
+      <div class="frow"><label>Point size</label>
+        <input type="number" id="pt-size" value="2" min="1" max="20" onchange="scheduleRender()">
+      </div>
+      <div class="frow"><label>Opacity</label>
+        <input type="number" id="pt-opacity" value="0.9" min="0.05" max="1" step="0.05" onchange="scheduleRender()">
+      </div>
+    </div>
+
+    <div class="sb">
+      <div class="sbt">Step 4 — Zones</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+        <span style="font-size:9px;color:var(--muted)">Saved zones</span>
+        <button id="btn-clear-zones" style="font-size:9px;padding:1px 7px;border-radius:3px;border:1px solid rgba(212,79,79,.35);background:transparent;color:var(--red);cursor:pointer;font-family:inherit">Clear all</button>
+      </div>
+      <div id="zone-panel">
+        <div style="font-size:9px;color:var(--muted);line-height:1.7">Draw zones on floor plan —<br>click near start point to close polygon</div>
+      </div>
+    </div>
+
+    <div class="sb">
+      <div class="sbt">Step 5 — Export</div>
+      <div style="font-size:9px;color:var(--muted);line-height:1.7;margin-bottom:5px">
+        Exports original CSV + added columns:<br>
+        <span style="color:var(--text)">floor_x · floor_y · zone</span>
+      </div>
+      <button class="btn btn-g" onclick="exportCSV()">Export mapped CSV</button>
+      <button class="btn btn-p" onclick="savePNG()">Save floor plan PNG</button>
+      <button class="btn btn-r" onclick="resetAll()">Reset all</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Calibration modal -->
+<div class="modal" id="cal-modal">
+ <div class="mbox" style="max-width:900px">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div class="mh">Calibrate — Point Cloud ↔ Floor Plan</div>
+    <span style="font-size:9px;color:var(--muted)">Click <b style="color:var(--text)">point cloud first</b>, then matching <b style="color:var(--text)">floor plan position</b></span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Point Cloud (click to add)</div>
+      <div style="background:#03050d;border:1px solid var(--bd2);border-radius:4px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:280px;cursor:crosshair">
+        <canvas id="cal-cloud-cv" style="display:block;max-width:100%;cursor:crosshair"></canvas>
+      </div>
+      <div style="font-size:9px;color:var(--muted)" id="cal-cloud-info">0 pts</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Floor Plan (click matching position)</div>
+      <div style="background:#03050d;border:1px solid var(--bd2);border-radius:4px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:280px;cursor:crosshair">
+        <canvas id="cal-floor-cv" style="display:block;max-width:100%;cursor:crosshair"></canvas>
+      </div>
+      <div style="font-size:9px;color:var(--muted)" id="cal-floor-info">0 pts</div>
+    </div>
+  </div>
+  <div style="font-size:10px;padding:5px 9px;background:var(--surf2);border-radius:4px;border:1px solid var(--bd)" id="cal-modal-status">Add at least 4 pairs. Click point cloud first, then the matching floor plan position.</div>
+  <div style="display:flex;gap:7px;flex-wrap:wrap">
+    <button class="btn btn-g" onclick="applyCalibration()" style="width:auto;margin:0">Apply</button>
+    <button class="btn" onclick="undoCalPair()" style="width:auto;margin:0">Undo last pair</button>
+    <button class="btn" onclick="undoCalCloud()" style="width:auto;margin:0">Undo cloud pt</button>
+    <button class="btn" onclick="undoCalFloor()" style="width:auto;margin:0">Undo floor pt</button>
+    <button class="btn" onclick="clearCalibration()" style="width:auto;margin:0">Clear all</button>
+    <button class="btn btn-r" onclick="closeCalModal()" style="width:auto;margin:0">Cancel</button>
+  </div>
+ </div>
+</div>
+
+<!-- Zone modal -->
+<div class="modal" id="zone-modal">
+ <div class="mbox">
+  <div class="mh">Name this zone</div>
+  <div class="mrow"><label>Name</label><input id="z-name" type="text" placeholder="e.g. Atrium" maxlength="32"></div>
+  <div class="mrow"><label>Colour</label><input id="z-color" type="color" value="#2bbfb0" style="width:44px;height:24px;border:none;cursor:pointer;padding:0;background:none;flex:none"></div>
+  <div class="mbtns">
+    <button class="btn btn-g" onclick="confirmZone()">Save zone</button>
+    <button class="btn btn-r" onclick="cancelZone()">Discard</button>
+  </div>
+ </div>
+</div>
+
+<!-- Progress overlay -->
+<div id="prog-overlay">
+  <div id="prog-lbl">Loading…</div>
+  <div id="prog-track"><div id="prog-fill"></div></div>
+</div>
+
+<script>
+// ── Colour maps ────────────────────────────────────────────────────────────────
+const CMAPS = {
+  viridis:[[68,1,84],[59,28,140],[33,102,172],[29,145,192],[65,182,196],[127,205,187],[199,233,180],[237,248,177],[255,255,204]],
+  heat:   [[10,22,40],[26,95,165],[212,79,79],[253,231,37]],
+  plasma: [[13,8,135],[84,2,163],[139,10,165],[185,50,137],[219,92,104],[244,136,73],[254,188,43],[240,249,33]],
+  rdylgn: [[165,0,38],[215,48,39],[244,109,67],[253,174,97],[255,255,191],[166,217,106],[102,189,99],[26,152,80],[0,104,55]],
+};
+
+function cmapColor(t, name){
+  const stops = CMAPS[name] || CMAPS.viridis;
+  t = Math.max(0, Math.min(1, t));
+  const seg = (stops.length-1)*t;
+  const i = Math.min(Math.floor(seg), stops.length-2);
+  const f = seg - i;
+  const a = stops[i], b = stops[i+1];
+  return [Math.round(a[0]+(b[0]-a[0])*f), Math.round(a[1]+(b[1]-a[1])*f), Math.round(a[2]+(b[2]-a[2])*f)];
+}
+
+// ── State ──────────────────────────────────────────────────────────────────────
+// Raw arrays (parallel) — stored as typed arrays for speed
+let ptX = null, ptY = null;   // Float64Array
+let ptMeta = null;             // {colName: Float32Array}
+let csvHeaders = [];
+let metricCols = [];
+let rawLines = null;           // keep original lines for export
+
+let xMin,xMax,yMin,yMax;
+let floorImg = null;
+let boundsApplied = false;
+
+// Mapped floor coords (Float32Arrays)
+let fxArr = null, fyArr = null;
+
+let activeMetric = '';
+let pointCache = null;   // OffscreenCanvas or regular canvas
+let renderPending = false;
+
+let showPts=true, showBG=true, showZones=true;
+let userZones=[], zoneDraft=[], zoneDrawOn=false, pendingZone=null;
+
+let currentStep=1, stepsComplete=new Set();
+
+// ── Canvas ─────────────────────────────────────────────────────────────────────
+const fc = document.getElementById('fc'), fx2d = fc.getContext('2d');
+
+function fitCanvas(){
+  const wrap=document.getElementById('fwrap');
+  const ww=wrap.clientWidth||800, wh=wrap.clientHeight||500;
+  if(!floorImg){fc.width=ww;fc.height=wh;return;}
+  const ar=floorImg.naturalWidth/floorImg.naturalHeight;
+  let cw,ch;
+  if(ww/wh>ar){ch=wh;cw=Math.round(ch*ar);}else{cw=ww;ch=Math.round(cw/ar);}
+  if(fc.width!==cw||fc.height!==ch){fc.width=cw;fc.height=ch;pointCache=null;}
+}
+window.addEventListener('load',fitCanvas);
+window.addEventListener('resize',()=>{fitCanvas();renderAll();});
+
+// ── Progress UI ────────────────────────────────────────────────────────────────
+function showProg(label, pct){
+  const o=document.getElementById('prog-overlay');
+  o.classList.add('show');
+  document.getElementById('prog-lbl').textContent=label;
+  document.getElementById('prog-fill').style.width=Math.round(pct)+'%';
+}
+function hideProg(){document.getElementById('prog-overlay').classList.remove('show');}
+
+// ── CSV parsing — chunked, no Web Worker (works from file://) ─────────────────
+function loadCSV(inp){
+  const file = inp.files[0]; if(!file) return;
+  showProg('Reading file… (may take a few seconds)', 5);
+  setPill('p-busy','LOADING');
+  const reader = new FileReader();
+  reader.onload = e => {
+    showProg('Splitting lines…', 10);
+    setTimeout(() => parseCSVText(e.target.result, file.name), 30);
+  };
+  reader.onerror = ()=>{ hideProg(); alert('Failed to read file.'); };
+  reader.readAsText(file);
+}
+
+function parseCSVText(text, filename){
+  const lines = text.split('\n');
+  const header = lines[0].split(',').map(h=>h.replace(/"/g,'').trim());
+  const xi = header.indexOf('x');
+  const yi = header.indexOf('y');
+  if(xi<0||yi<0){ hideProg(); alert('CSV must have x and y columns.'); return; }
+
+  const mc = header.filter(h=>!['ref','x','y'].includes(h));
+  const n  = lines.length - 1;
+  const xA = new Float64Array(n);
+  const yA = new Float64Array(n);
+  const mA = {}; const mI = {};
+  mc.forEach(c=>{ mA[c]=new Float32Array(n); mI[c]=header.indexOf(c); });
+
+  let count=0, row=1;
+  let xMn=Infinity,xMx=-Infinity,yMn=Infinity,yMx=-Infinity;
+  const CHUNK=15000;
+
+  function step(){
+    const end=Math.min(row+CHUNK,lines.length);
+    for(;row<end;row++){
+      const line=lines[row]; if(!line||!line.trim())continue;
+      const c=line.split(',');
+      const xv=parseFloat(c[xi]), yv=parseFloat(c[yi]);
+      if(isNaN(xv)||isNaN(yv))continue;
+      xA[count]=xv; yA[count]=yv;
+      if(xv<xMn)xMn=xv; if(xv>xMx)xMx=xv;
+      if(yv<yMn)yMn=yv; if(yv>yMx)yMx=yv;
+      mc.forEach(c2=>{ mA[c2][count]=parseFloat(c[mI[c2]])||0; });
+      count++;
+    }
+    const pct=Math.round(row/lines.length*88)+8;
+    showProg('Parsing CSV… '+Math.min(pct,95)+'%  ('+count.toLocaleString()+' pts)', pct);
+    if(row<lines.length){ setTimeout(step,0); return; }
+
+    // Done — finalise
+    setTimeout(()=>{
+      ptX=xA.slice(0,count); ptY=yA.slice(0,count);
+      ptMeta={}; mc.forEach(c=>{ ptMeta[c]=mA[c].slice(0,count); });
+      csvHeaders=header; metricCols=mc;
+      xMin=xMn; xMax=xMx; yMin=yMn; yMax=yMx;
+      rawLines=lines;
+
+      const sel=document.getElementById('metric-sel');
+      sel.innerHTML='<option value="">— select metric —</option>'+
+        mc.map(m=>`<option value="${m}">${m}</option>`).join('');
+
+      document.getElementById('csv-info').textContent=
+        count.toLocaleString()+' points · '+mc.length+' metrics';
+      document.getElementById('top-info').textContent=
+        'X['+xMin.toFixed(0)+' → '+xMax.toFixed(0)+']  Y['+yMin.toFixed(0)+' → '+yMax.toFixed(0)+']';
+      document.getElementById('uz-csv').className='upz ok';
+      document.getElementById('uz-csv').innerHTML=
+        '<b>'+filename+'</b>'+count.toLocaleString()+' pts · '+mc.length+' metrics';
+
+      hideProg(); setPill('p-ok','CSV LOADED');
+      mark(1);
+    },30);
+  }
+  step();
+}
+
+
+// ── Floor plan ─────────────────────────────────────────────────────────────────
+function loadFloor(inp){
+  const file=inp.files[0];if(!file)return;
+  const img=new Image();
+  img.onload=()=>{
+    floorImg=img;
+    document.getElementById('uz-floor').className='upz ok';
+    document.getElementById('uz-floor').innerHTML=`<b>${file.name}</b>${img.naturalWidth}×${img.naturalHeight}`;
+    document.getElementById('fhint').style.display='none';
+    fitCanvas();pointCache=null;renderAll();mark(2);
+  };
+  img.src=URL.createObjectURL(file);
+}
+
+// ── Calibration state ─────────────────────────────────────────────────────────
+// calSrc: points in normalised point-cloud space [0,1]
+// calDst: corresponding points in normalised floor-plan space [0,1]
+let calSrc = [], calDst = [];
+
+// ── Affine transform (independent X/Y scale + rotation + translation) ───────────
+// Model:  fx = a·nx + b·ny + tx
+//         fy = c·nx + d·ny + ty
+//
+// 6 unknowns (a,b,c,d,tx,ty), solved independently for X and Y by least squares.
+// Minimum 3 pairs. Parallel lines stay parallel; no bending or perspective.
+
+let affineT = null;  // {a,b,c,d,tx,ty} once fitted
+
+// Solve  [X] = [A][x] via least squares using normal equations.
+// A is n×3: each row [nx, ny, 1].  x is the 3-vector [p,q,t].
+// Returns [p, q, t] or null if singular.
+function lsq3(rows, rhs){
+  // ATA = sum of outer products, ATb = sum of A'·b
+  let A00=0,A01=0,A02=0,A11=0,A12=0,A22=0;
+  let b0=0,b1=0,b2=0;
+  for(let i=0;i<rows.length;i++){
+    const [r0,r1,r2]=rows[i], y=rhs[i];
+    A00+=r0*r0; A01+=r0*r1; A02+=r0*r2;
+    A11+=r1*r1; A12+=r1*r2; A22+=r2*r2;
+    b0+=r0*y; b1+=r1*y; b2+=r2*y;
+  }
+  // Invert 3×3 symmetric matrix [A00 A01 A02 / A01 A11 A12 / A02 A12 A22]
+  const det = A00*(A11*A22-A12*A12) - A01*(A01*A22-A12*A02) + A02*(A01*A12-A11*A02);
+  if(Math.abs(det)<1e-14) return null;
+  const inv00=(A11*A22-A12*A12)/det, inv01=-(A01*A22-A12*A02)/det, inv02=(A01*A12-A11*A02)/det;
+  const inv11=(A00*A22-A02*A02)/det, inv12=-(A00*A12-A02*A01)/det;
+  const inv22=(A00*A11-A01*A01)/det;
+  return [
+    inv00*b0+inv01*b1+inv02*b2,
+    inv01*b0+inv11*b1+inv12*b2,
+    inv02*b0+inv12*b1+inv22*b2
+  ];
+}
+
+function fitAffine(){
+  const n = Math.min(calSrc.length, calDst.length);
+  if(n < 3){ affineT = null; return false; }
+
+  const rows = calSrc.slice(0,n).map(p=>[p[0],p[1],1]);
+  const fxRhs = calDst.slice(0,n).map(p=>p[0]);
+  const fyRhs = calDst.slice(0,n).map(p=>p[1]);
+
+  const px = lsq3(rows, fxRhs);
+  const py = lsq3(rows, fyRhs);
+  if(!px||!py){ affineT=null; return false; }
+
+  const [a,b,tx] = px;
+  const [c,d,ty] = py;
+
+  // Decompose for display: scale_x, scale_y, rotation (approx)
+  const sx = Math.sqrt(a*a+c*c);
+  const sy = Math.sqrt(b*b+d*d);
+  const angle = Math.atan2(c, a)*180/Math.PI;
+
+  // Mean reprojection error
+  let sumErr=0;
+  for(let i=0;i<n;i++){
+    const nx=calSrc[i][0],ny=calSrc[i][1];
+    const ex=a*nx+b*ny+tx-calDst[i][0];
+    const ey=c*nx+d*ny+ty-calDst[i][1];
+    sumErr+=Math.sqrt(ex*ex+ey*ey);
+  }
+
+  affineT = {a,b,c,d,tx,ty,sx,sy,angle,meanErr:(sumErr/n*1000).toFixed(1)};
+  return true;
+}
+
+// Point cloud normalisation (raw coords → [0,1])
+function cloudNorm(x, y){
+  const flip = document.getElementById('b-flipy').checked;
+  const nx = (x - xMin) / (xMax - xMin || 1);
+  const ny = (y - yMin) / (yMax - yMin || 1);
+  return [nx, flip ? 1 - ny : ny];
+}
+
+// Apply affine transform
+function applyAffine(nx, ny){
+  if(!affineT) return [nx, ny];
+  const {a,b,c,d,tx,ty} = affineT;
+  return [a*nx + b*ny + tx,  c*nx + d*ny + ty];
+}
+
+// Compute floor coords for all points
+function computeFloorCoords(){
+  if(!ptX) return;
+  fitAffine();
+  const n = ptX.length;
+  fxArr = new Float32Array(n);
+  fyArr = new Float32Array(n);
+  for(let i=0;i<n;i++){
+    const [nx,ny] = cloudNorm(ptX[i], ptY[i]);
+    const [fx,fy] = applyAffine(nx, ny);
+    fxArr[i] = Math.max(-0.5, Math.min(1.5, fx));
+    fyArr[i] = Math.max(-0.5, Math.min(1.5, fy));
+  }
+  boundsApplied = affineT !== null;
+  pointCache = null;
+}
+
+function recomputeIfReady(){
+  if(calSrc.length >= 3 && calSrc.length === calDst.length){
+    computeFloorCoords(); scheduleRender();
+  }
+}
+
+// ── Calibration modal ─────────────────────────────────────────────────────────
+const PT_COLS = ['#f87171','#60a5fa','#f59e0b','#34d399','#c084fc','#fb923c','#94a3b8','#f472b6','#a3e635','#38bdf8'];
+
+// Render a thumbnail of the point cloud onto a canvas (grey dots, fast)
+function renderCloudThumb(cv){
+  if(!ptX) return;
+  const W = cv.width, H = cv.height;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#03050d'; ctx.fillRect(0,0,W,H);
+  const flip = document.getElementById('b-flipy').checked;
+  // Sample up to 40k points for speed
+  const step = Math.max(1, Math.floor(ptX.length / 40000));
+  const imgd = ctx.createImageData(W,H);
+  const d = imgd.data;
+  for(let i=0;i<ptX.length;i+=step){
+    const nx = (ptX[i]-xMin)/(xMax-xMin||1);
+    const ny = flip ? 1-(ptY[i]-yMin)/(yMax-yMin||1) : (ptY[i]-yMin)/(yMax-yMin||1);
+    const px = Math.round(nx*W), py = Math.round(ny*H);
+    if(px<0||px>=W||py<0||py>=H) continue;
+    const idx = (py*W+px)*4;
+    d[idx]=120; d[idx+1]=160; d[idx+2]=200; d[idx+3]=180;
+  }
+  ctx.putImageData(imgd,0,0);
+}
+
+function drawCalDot(ctx, x, y, idx){
+  const col = PT_COLS[idx % PT_COLS.length];
+  ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2);
+  ctx.fillStyle = col+'cc'; ctx.fill();
+  ctx.strokeStyle = 'white'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = 'white'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(idx+1, x, y+2.5);
+}
+
+function renderCalCanvases(){
+  const ccv = document.getElementById('cal-cloud-cv');
+  const fcv = document.getElementById('cal-floor-cv');
+  const CW = ccv.width, CH = ccv.height;
+  const FW = fcv.width, FH = fcv.height;
+
+  // Cloud
+  renderCloudThumb(ccv);
+  calSrc.forEach((p,i) => drawCalDot(ccv.getContext('2d'), p[0]*CW, p[1]*CH, i));
+
+  // Floor plan
+  const fctx = fcv.getContext('2d');
+  fctx.fillStyle = '#03050d'; fctx.fillRect(0,0,FW,FH);
+  if(floorImg){ try{fctx.drawImage(floorImg,0,0,FW,FH);}catch(e){} }
+  else{ fctx.fillStyle='rgba(70,90,120,.35)';fctx.font='9px monospace';fctx.textAlign='center';fctx.fillText('Upload floor plan first',FW/2,FH/2); }
+  calDst.forEach((p,i) => drawCalDot(fctx, p[0]*FW, p[1]*FH, i));
+
+  // Fit transform and update status
+  const n = Math.min(calSrc.length, calDst.length);
+  const balanced = calSrc.length === calDst.length;
+  const ok = n >= 2 && balanced;
+
+  // Try fitting to show live params
+  let paramStr = '';
+  if(ok){
+    fitAffine();
+    if(affineT){
+      paramStr = ' · sx='+affineT.sx.toFixed(3)+' sy='+affineT.sy.toFixed(3)
+               +' · rot='+affineT.angle.toFixed(1)+'°'
+               +' · err='+affineT.meanErr+'‰';
+    }
+  }
+
+  document.getElementById('cal-cloud-info').textContent = calSrc.length+' pts'+(calSrc.length>=3?' ✓':'');
+  document.getElementById('cal-floor-info').textContent = calDst.length+' pts'+(calDst.length>=3?' ✓':'');
+  document.getElementById('cal-modal-status').innerHTML = ok
+    ? '<span style="color:var(--green)">✓ '+n+' pairs · Similarity transform'+paramStr+' — click Apply</span>'
+    : !balanced
+    ? '<span style="color:var(--amber)">Unbalanced: '+calSrc.length+' cloud · '+calDst.length+' floor pts</span>'
+    : 'Click point cloud first, then the matching floor plan position. Minimum 3 pairs.';
+
+  // Sidebar status
+  document.getElementById('cal-status-sb').textContent = ok
+    ? '✓ '+n+' pairs'+paramStr
+    : calSrc.length+' / '+calDst.length+' pts (need ≥3 pairs)';
+}
+
+function sizeCalCanvases(){
+  const ccv = document.getElementById('cal-cloud-cv');
+  const fcv = document.getElementById('cal-floor-cv');
+  const wrap = document.getElementById('cal-modal');
+  // Each side gets half the modal minus gap
+  const W = Math.min(420, Math.floor((window.innerWidth - 80) / 2));
+  // Cloud: use point cloud aspect ratio
+  const cloudAR = (xMax-xMin) / (yMax-yMin||1);
+  const cloudH = Math.round(W/cloudAR);
+  ccv.width = W; ccv.height = Math.max(180, Math.min(340, cloudH));
+  // Floor: use floor plan aspect ratio
+  if(floorImg){
+    const floorAR = floorImg.naturalWidth/floorImg.naturalHeight;
+    fcv.width = W; fcv.height = Math.max(180, Math.min(340, Math.round(W/floorAR)));
+  } else {
+    fcv.width = W; fcv.height = ccv.height;
+  }
+}
+
+// (openCalModal defined below)
+function closeCalModal(){ document.getElementById('cal-modal').style.display = 'none'; }
+
+// Click handlers set in openCalModal (fresh each time to avoid stale refs)
+function setupCalClicks(){
+  const ccv = document.getElementById('cal-cloud-cv');
+  const fcv = document.getElementById('cal-floor-cv');
+  ccv.onclick = e => {
+    const r = ccv.getBoundingClientRect();
+    calSrc.push([(e.clientX-r.left)/r.width, (e.clientY-r.top)/r.height]);
+    renderCalCanvases();
+  };
+  fcv.onclick = e => {
+    if(calDst.length >= calSrc.length){ alert('Add a cloud point first, then the floor plan match.'); return; }
+    const r = fcv.getBoundingClientRect();
+    calDst.push([(e.clientX-r.left)/r.width, (e.clientY-r.top)/r.height]);
+    renderCalCanvases();
+  };
+}
+
+// Re-attach clicks every time modal opens
+function openCalModal(){
+  if(!ptX){ alert('Load CSV first.'); return; }
+  document.getElementById('cal-modal').style.display = 'block';
+  setTimeout(()=>{ sizeCalCanvases(); renderCalCanvases(); setupCalClicks(); }, 50);
+}
+
+function undoCalPair(){
+  if(calSrc.length>calDst.length) calSrc.pop();
+  else if(calDst.length>calSrc.length) calDst.pop();
+  else if(calSrc.length>0){ calSrc.pop(); calDst.pop(); }
+  renderCalCanvases();
+}
+function undoCalCloud(){ if(calSrc.length>0){ calSrc.pop(); renderCalCanvases(); } }
+function undoCalFloor(){ if(calDst.length>0){ calDst.pop(); renderCalCanvases(); } }
+
+function clearCalibration(){
+  calSrc=[]; calDst=[];
+  boundsApplied=false; fxArr=null; fyArr=null; pointCache=null;
+  document.getElementById('cal-status-sb').textContent='No calibration yet';
+  if(document.getElementById('cal-modal').style.display==='block') renderCalCanvases();
+  checkNext(); renderAll();
+}
+
+function applyCalibration(){
+  const n = Math.min(calSrc.length, calDst.length);
+  if(n<3){ alert('Need ≥3 matched pairs.'); return; }
+  if(calSrc.length!==calDst.length){ alert('Unbalanced: '+calSrc.length+' cloud vs '+calDst.length+' floor pts. Use Undo to fix.'); return; }
+  closeCalModal();
+  computeFloorCoords();
+  scheduleRender();
+  mark(3);
+}
+
+// ── Rendering ──────────────────────────────────────────────────────────────────
+function scheduleRender(){
+  if(renderPending) return;
+  renderPending=true;
+  requestAnimationFrame(()=>{renderPending=false; buildPointCache(); renderAll();});
+}
+
+function setMetric(v){
+  // v may be URL-encoded
+  const sel=document.getElementById('metric-sel');
+  const opt=sel.selectedOptions[0];
+  activeMetric=opt?opt.getAttribute('data-raw')||v:v;
+  scheduleRender();
+}
+
+function buildPointCache(){
+  if(!ptX||!fxArr||!activeMetric||!ptMeta[activeMetric]) return;
+  const W=fc.width, H=fc.height; if(!W||!H) return;
+
+  const vals=ptMeta[activeMetric];
+  const n=vals.length;
+  const ptSize=Math.max(1,parseInt(document.getElementById('pt-size').value)||2);
+  const opacity=parseFloat(document.getElementById('pt-opacity').value)||0.9;
+  const cmap=document.getElementById('cmap-sel').value||'viridis';
+
+  // Metric range
+  let mn=Infinity,mx=-Infinity;
+  for(let i=0;i<n;i++){if(vals[i]<mn)mn=vals[i];if(vals[i]>mx)mx=vals[i];}
+  const rng=mx-mn||1;
+
+  document.getElementById('leg-min').textContent=mn.toFixed(3);
+  document.getElementById('leg-max').textContent=mx.toFixed(3);
+  document.getElementById('leg-metric').textContent=activeMetric;
+  renderLegend(cmap);
+
+  const off=document.createElement('canvas'); off.width=W; off.height=H;
+  const oc=off.getContext('2d');
+
+  if(ptSize<=2){
+    // Fast pixel-by-pixel using ImageData
+    const imgd=oc.createImageData(W,H);
+    const d=imgd.data;
+    const alpha=Math.round(opacity*255);
+    const r2=ptSize===2;
+    for(let i=0;i<n;i++){
+      const t=(vals[i]-mn)/rng;
+      const[r,g,b]=cmapColor(t,cmap);
+      const px=Math.round(fxArr[i]*W), py=Math.round(fyArr[i]*H);
+      if(px<0||px>=W||py<0||py>=H) continue;
+      let idx=(py*W+px)*4;
+      d[idx]=r;d[idx+1]=g;d[idx+2]=b;d[idx+3]=alpha;
+      if(r2){
+        if(px+1<W){idx=(py*W+px+1)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;d[idx+3]=alpha;}
+        if(py+1<H){idx=((py+1)*W+px)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;d[idx+3]=alpha;}
+        if(px+1<W&&py+1<H){idx=((py+1)*W+px+1)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;d[idx+3]=alpha;}
+      }
+    }
+    oc.putImageData(imgd,0,0);
+  } else {
+    // Bucket by color (256 buckets) then batch-draw arcs
+    const B=256, bkts=Array.from({length:B},()=>[]);
+    for(let i=0;i<n;i++){
+      const t=(vals[i]-mn)/rng;
+      bkts[Math.min(B-1,Math.round(t*(B-1)))].push(i);
+    }
+    const r=ptSize/2;
+    bkts.forEach((idxs,bi)=>{
+      if(!idxs.length) return;
+      const[cr,cg,cb]=cmapColor(bi/(B-1),cmap);
+      oc.fillStyle=`rgba(${cr},${cg},${cb},${opacity})`;
+      oc.beginPath();
+      idxs.forEach(i=>{
+        const px=fxArr[i]*W, py=fyArr[i]*H;
+        oc.moveTo(px+r,py);
+        oc.arc(px,py,r,0,Math.PI*2);
+      });
+      oc.fill();
+    });
+  }
+
+  pointCache=off;
+}
+
+function renderLegend(cmap){
+  const cv=document.getElementById('legbar-cv');
+  const ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  const imgd=ctx.createImageData(W,H);
+  const d=imgd.data;
+  for(let x=0;x<W;x++){
+    const[r,g,b]=cmapColor(x/W,cmap||'viridis');
+    for(let y=0;y<H;y++){const idx=(y*W+x)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;d[idx+3]=220;}
+  }
+  ctx.putImageData(imgd,0,0);
+}
+
+function renderAll(){
+  const W=fc.width,H=fc.height;if(!W||!H)return;
+  fx2d.clearRect(0,0,W,H);
+  if(!floorImg){fx2d.fillStyle='#0a0d18';fx2d.fillRect(0,0,W,H);}
+  else if(showBG){fx2d.drawImage(floorImg,0,0,W,H);}
+  if(showPts&&pointCache) fx2d.drawImage(pointCache,0,0);
+  if(showZones) drawZones();
+  drawDraft();
+}
+
+function drawZones(){
+  const W=fc.width,H=fc.height;
+  userZones.forEach(z=>{
+    if(z.pts.length<2)return;
+    fx2d.beginPath();fx2d.moveTo(z.pts[0][0]*W,z.pts[0][1]*H);
+    for(let i=1;i<z.pts.length;i++)fx2d.lineTo(z.pts[i][0]*W,z.pts[i][1]*H);
+    if(z.closed)fx2d.closePath();
+    fx2d.fillStyle=z.color+'28';fx2d.fill();
+    fx2d.strokeStyle=z.color+'cc';fx2d.lineWidth=1.5;fx2d.stroke();
+    const cx=z.pts.reduce((s,p)=>s+p[0],0)/z.pts.length*W;
+    const cy=z.pts.reduce((s,p)=>s+p[1],0)/z.pts.length*H;
+    fx2d.fillStyle=z.color;fx2d.font='bold 8px monospace';fx2d.textAlign='center';fx2d.fillText(z.name,cx,cy+3);
+  });
+}
+function drawDraft(){
+  if(!zoneDrawOn||!zoneDraft.length)return;
+  const W=fc.width,H=fc.height;
+  fx2d.beginPath();fx2d.moveTo(zoneDraft[0][0]*W,zoneDraft[0][1]*H);
+  for(let i=1;i<zoneDraft.length;i++)fx2d.lineTo(zoneDraft[i][0]*W,zoneDraft[i][1]*H);
+  fx2d.strokeStyle='rgba(255,255,255,.5)';fx2d.lineWidth=1.2;fx2d.setLineDash([4,3]);fx2d.stroke();fx2d.setLineDash([]);
+  zoneDraft.forEach((p,i)=>{fx2d.beginPath();fx2d.arc(p[0]*W,p[1]*H,3,0,Math.PI*2);fx2d.fillStyle=i===0?'#e09b25':'white';fx2d.fill();});
+}
+
+// ── Layers ─────────────────────────────────────────────────────────────────────
+function togL(m){
+  if(m==='pts')  {showPts=!showPts;    document.getElementById('mb-pts').className='mb'+(showPts?' on':'');}
+  if(m==='bg')   {showBG=!showBG;      document.getElementById('mb-bg').className='mb'+(showBG?' on':'');}
+  if(m==='zones'){showZones=!showZones;document.getElementById('mb-zones').className='mb'+(showZones?' on':'');}
+  renderAll();
+}
+
+// ── Zone drawing ───────────────────────────────────────────────────────────────
+function toggleZoneDraw(){
+  zoneDrawOn=!zoneDrawOn;
+  const btn=document.getElementById('mb-zdraw');
+  btn.className='mb'+(zoneDrawOn?' on-p':'');
+  btn.textContent=zoneDrawOn?'Drawing…':'Draw Zone';
+  fc.style.cursor=zoneDrawOn?'crosshair':'default';
+  if(!zoneDrawOn)zoneDraft=[];
+}
+fc.addEventListener('click',e=>{
+  if(!zoneDrawOn)return;
+  const cr=fc.getBoundingClientRect();
+  const nx=(e.clientX-cr.left)/cr.width, ny=(e.clientY-cr.top)/cr.height;
+  if(zoneDraft.length>=3){
+    const fp=zoneDraft[0];
+    if(Math.hypot((nx-fp[0])*fc.width,(ny-fp[1])*fc.height)<14){
+      pendingZone={pts:zoneDraft.slice(),closed:true};zoneDraft=[];openZoneModal();return;
+    }
+  }
+  zoneDraft.push([nx,ny]);renderAll();
+});
+fc.addEventListener('dblclick',e=>{
+  if(!zoneDrawOn||zoneDraft.length<2)return;
+  e.preventDefault();pendingZone={pts:zoneDraft.slice(),closed:false};zoneDraft=[];openZoneModal();
+});
+function openZoneModal(){document.getElementById('z-name').value='';document.getElementById('zone-modal').style.display='block';setTimeout(()=>document.getElementById('z-name').focus(),50);}
+function confirmZone(){
+  const name=document.getElementById('z-name').value.trim()||'Zone '+(userZones.length+1);
+  const color=document.getElementById('z-color').value;
+  if(pendingZone){userZones.push({...pendingZone,name,color});pendingZone=null;}
+  document.getElementById('zone-modal').style.display='none';
+  renderZonePanel();renderAll();mark(4);
+}
+function cancelZone(){pendingZone=null;document.getElementById('zone-modal').style.display='none';}
+document.getElementById('z-name').addEventListener('keydown',e=>{if(e.key==='Enter')confirmZone();if(e.key==='Escape')cancelZone();});
+function undoZonePt(){if(zoneDraft.length>0){zoneDraft.pop();renderAll();}}
+function clearZoneDraft(){zoneDraft=[];if(zoneDrawOn)toggleZoneDraw();renderAll();}
+function deleteZone(i){if(!confirm('Delete zone "'+userZones[i].name+'"?'))return;userZones.splice(i,1);renderZonePanel();renderAll();}
+function renderZonePanel(){
+  const p=document.getElementById('zone-panel');
+  if(!userZones.length){p.innerHTML='<div style="font-size:9px;color:var(--muted);line-height:1.7">Draw zones on floor plan —<br>click near start point to close polygon</div>';return;}
+  p.innerHTML=userZones.map((z,i)=>`
+    <div style="display:flex;align-items:center;gap:5px;padding:4px 6px;background:var(--surf2);border-radius:4px;margin-bottom:3px">
+      <div style="width:8px;height:8px;border-radius:50%;background:${z.color};flex-shrink:0"></div>
+      <span style="font-size:10px;color:${z.color};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${z.name}</span>
+      <span style="font-size:9px;color:var(--muted)">${z.closed?'polygon':'open'}</span>
+      <button data-del="${i}" style="font-size:11px;font-weight:700;padding:0 4px;border:none;background:transparent;color:var(--muted);cursor:pointer">✕</button>
+    </div>`).join('');
+}
+document.getElementById('zone-panel').addEventListener('click',function(e){
+  const btn=e.target.closest('[data-del]');if(!btn)return;deleteZone(+btn.dataset.del);
+});
+document.getElementById('btn-clear-zones').addEventListener('click',function(){
+  if(!userZones.length)return;if(!confirm('Delete ALL zones?'))return;userZones=[];renderZonePanel();renderAll();
+});
+
+// ── Zone assignment ────────────────────────────────────────────────────────────
+function zoneOf(fx,fy){
+  for(let i=0;i<userZones.length;i++){
+    const z=userZones[i];if(!z.closed)continue;
+    const p=z.pts;let ins=false;
+    for(let a=0,b=p.length-1;a<p.length;b=a++){
+      if(((p[a][1]>fy)!==(p[b][1]>fy))&&(fx<(p[b][0]-p[a][0])*(fy-p[a][1])/(p[b][1]-p[a][1])+p[a][0]))ins=!ins;
+    }
+    if(ins)return z.name;
+  }
+  return '';
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────────
+function exportCSV(){
+  if(!ptX){alert('No CSV loaded.');return;}
+  if(!boundsApplied){alert('Apply alignment first (Step 3).');return;}
+  showProg('Writing CSV…',50);
+  setTimeout(()=>{
+    // Use original lines, append floor_x, floor_y, zone
+    const hdr=rawLines[0].trim()+',floor_x,floor_y,zone';
+    const out=[hdr];
+    const n=ptX.length;
+    for(let i=0;i<n;i++){
+      const line=rawLines[i+1]?.trim();
+      if(!line)continue;
+      const zone=zoneOf(fxArr[i],fyArr[i]);
+      out.push(`${line},${fxArr[i].toFixed(5)},${fyArr[i].toFixed(5)},${zone}`);
+    }
+    dl(out.join('\n'),'space_analysis_mapped.csv','text/csv');
+    hideProg();mark(5);setPill('p-ok','EXPORTED');
+  },50);
+}
+
+function savePNG(){
+  if(!floorImg){alert('No floor plan loaded.');return;}
+  fc.toBlob(blob=>{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`space_analysis_${activeMetric||'overlay'}.png`;
+    a.click();
+  },'image/png');
+}
+
+function dl(content,name,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();}
+
+// ── Wizard ─────────────────────────────────────────────────────────────────────
+function mark(n){stepsComplete.add(n);renderWiz();checkNext();}
+function renderWiz(){
+  for(let i=1;i<=5;i++){
+    const el=document.getElementById('ws'+i);
+    el.className='wstep'+(stepsComplete.has(i)?' done':i===currentStep?' active':'');
+  }
+}
+function stepReady(n){
+  if(n===1)return !!ptX;
+  if(n===2)return !!floorImg;
+  if(n===3)return calSrc.length>=3&&calSrc.length===calDst.length&&boundsApplied;
+  if(n===4)return userZones.length>0;
+  return true;
+}
+function checkNext(){
+  const btn=document.getElementById('next-btn');
+  btn.disabled=!stepReady(currentStep);
+  if(currentStep===5){btn.textContent='Export CSV ↓';btn.onclick=exportCSV;}
+  else{btn.textContent='NEXT →';btn.onclick=nextStep;}
+  for(let i=1;i<=5;i++)if(stepReady(i))stepsComplete.add(i);
+  renderWiz();
+}
+function nextStep(){
+  if(!stepReady(currentStep)){
+    const h={1:'Load the space analysis CSV first.',2:'Upload a floor plan image first.',3:'Open the calibration window and add ≥4 point pairs, then click Apply.',4:'Draw and save at least one zone first.'};
+    if(h[currentStep])alert(h[currentStep]);
+    return;
+  }
+  stepsComplete.add(currentStep);
+  if(currentStep<5)currentStep++;
+  renderWiz();checkNext();
+}
+
+function resetAll(){
+  if(!confirm('Reset everything?'))return;
+  ptX=ptY=ptMeta=fxArr=fyArr=rawLines=null;
+  csvHeaders=[];metricCols=[];floorImg=null;boundsApplied=false;
+  activeMetric='';pointCache=null;
+  userZones=[];zoneDraft=[];pendingZone=null;
+  stepsComplete=new Set();currentStep=1;
+  document.getElementById('metric-sel').innerHTML='<option value="">— select after loading CSV —</option>';
+  document.getElementById('csv-info').textContent='Awaiting CSV…';
+  document.getElementById('top-info').textContent='';
+  document.getElementById('leg-min').textContent='—';
+  document.getElementById('leg-max').textContent='—';
+  document.getElementById('leg-metric').textContent='no metric selected';
+  ['uz-csv','uz-floor'].forEach(id=>{
+    const el=document.getElementById(id);el.className='upz';
+    el.innerHTML=id==='uz-csv'?'<b>Analysis CSV</b>needs x and y columns':'<b>Floor plan</b>PNG · JPG';
+  });
+  document.getElementById('fhint').style.display='';
+  renderZonePanel();renderWiz();checkNext();setPill('p-idle','IDLE');
+  fitCanvas();renderAll();
+}
+
+function setPill(cls,txt){const p=document.getElementById('pill');p.className='pill '+cls;p.textContent=txt;}
+
+// Init
+renderWiz();checkNext();renderAll();
+</script>
+</body>
+</html>
