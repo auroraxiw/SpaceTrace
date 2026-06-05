@@ -37,8 +37,11 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono',ui-monospace,C
 #nxt:disabled{opacity:.28;cursor:not-allowed}
 
 /* main */
-#main{display:grid;grid-template-columns:auto 1fr 280px;gap:1px;background:var(--bd);flex:1;min-height:0}
+#main{display:flex;flex-direction:row;background:var(--bd);flex:1;min-height:0;gap:1px}
 .panel{background:var(--bg);display:flex;flex-direction:column;min-height:0}
+#cam-panel{flex:0 0 auto;width:300px;min-width:120px;max-width:60vw}
+#floor-panel{flex:1 1 0;min-width:200px}
+#sidebar-panel{flex:0 0 280px;min-width:220px;max-width:380px}
 .ph{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:var(--surf);border-bottom:1px solid var(--bd);flex-shrink:0;gap:4px;flex-wrap:wrap}
 .ptitle{font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cwrap{position:relative;flex:1;min-height:0;background:#03050d;overflow:hidden;display:flex;align-items:center;justify-content:center}
@@ -47,6 +50,9 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono',ui-monospace,C
 #lwrap{overflow:auto;align-items:flex-start;justify-content:flex-start;}
 #lwrap canvas{max-width:none;max-height:none;display:block;}
 .hint{position:absolute;font-size:10px;color:var(--muted);text-align:center;pointer-events:none;line-height:1.8}
+/* Draggable resizer between camera and floor panels */
+.resizer{width:5px;background:var(--bd);cursor:col-resize;flex-shrink:0;transition:background .15s;z-index:10}
+.resizer:hover,.resizer.dragging{background:var(--cyan)}
 
 /* playback */
 #ctrlbar{display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--surf);border-top:1px solid var(--bd);flex-shrink:0}
@@ -66,7 +72,7 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono',ui-monospace,C
 .legval{font-size:8px;color:var(--muted);white-space:nowrap}
 
 /* sidebar */
-#sidebar{display:flex;flex-direction:column;gap:1px;background:var(--bd);overflow-y:auto}
+#sidebar{display:flex;flex-direction:column;gap:1px;background:var(--bd);overflow-y:auto;flex:0 0 280px;min-width:220px;max-width:380px}
 .sb{background:var(--bg);padding:7px 9px;flex-shrink:0}
 .sbt{font-size:7px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;padding-bottom:2px;border-bottom:1px solid var(--bd)}
 .upz{border:1px dashed rgba(255,255,255,.09);border-radius:4px;padding:6px 8px;text-align:center;cursor:pointer;color:var(--muted);font-size:9px;line-height:1.7;transition:all .2s;margin-bottom:4px}
@@ -156,20 +162,25 @@ input[type=file]{display:none}
     <div class="ph">
       <span class="ptitle" id="cam-panel-title">Camera</span>
       <div class="mbtns">
-        <div class="mb on" id="tab-img" onclick="setLeftMode('img')">Image</div>
-        <div class="mb"    id="tab-vid" onclick="setLeftMode('vid')">Video</div>
-        <div class="mb on" id="mb-cbbox" onclick="togCam('bbox')">BBox</div>
+        <div class="mb on" id="tab-img"   onclick="setLeftMode('img')">Image</div>
+        <div class="mb"    id="tab-vid"   onclick="setLeftMode('vid')">Video</div>
+        <div class="mb on" id="mb-cbbox"  onclick="togCam('bbox')">BBox</div>
+        <div class="mb on" id="mb-cdot"   onclick="togCam('dot')">Centre</div>
       </div>
     </div>
     <div class="cwrap" id="lwrap">
-      <canvas id="lc"></canvas>
-      <video id="lv" muted playsinline preload="auto" style="display:none;max-width:100%;max-height:100%;object-fit:contain;background:#000"></video>
+      <canvas id="lc" style="position:absolute;top:0;left:0;pointer-events:none;z-index:2"></canvas>
+      <video id="lvid" muted playsinline preload="metadata"
+        style="display:none;max-width:100%;max-height:100%;object-fit:contain;background:#000;position:relative;z-index:1"></video>
       <div class="hint" id="lhint">Upload ref frame<br>(Step 5)</div>
     </div>
   </div>
 
+  <!-- Resizer 1: between camera and floor plan -->
+  <div class="resizer" id="resizer1"></div>
+
   <!-- Floor plan canvas -->
-  <div class="panel">
+  <div class="panel" id="floor-panel">
     <div class="ph">
       <span class="ptitle">Floor Plan</span>
       <div class="mbtns">
@@ -200,8 +211,11 @@ input[type=file]{display:none}
     </div>
   </div>
 
+  <!-- Resizer 2: between floor plan and sidebar -->
+  <div class="resizer" id="resizer2"></div>
+
   <!-- Sidebar -->
-  <div id="sidebar">
+  <div id="sidebar" class="panel" id="sidebar-panel">
 
     <!-- Step 1: Analysis CSV -->
     <div class="sb">
@@ -403,14 +417,14 @@ input[type=file]{display:none}
   <div id="prog-track"><div id="prog-fill"></div></div>
 </div>
 
-<video id="lvid" muted playsinline preload="auto" style="display:none"></video>
+<!-- lvid moved into camera panel cwrap -->
 
 <script>
 // ═══════════════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════
-const PIDS  = ['AA01','AA02','AA03','AA04','AA05','AA06','AA07'];
-const PCOLS = ['#4c9fd4','#d4724c','#1fa876','#c46090','#7c6dcc','#b08820','#2bbfb0'];
+const PIDS  = ['AA01','AA02','AA03','AA04','AA05','AA06','AA07','AA-01','AA-02','AA-03','AA-04','AA-05','AA-06','AA-07'];
+const PCOLS = ['#4c9fd4','#d4724c','#1fa876','#c46090','#7c6dcc','#b08820','#2bbfb0','#4c9fd4','#d4724c','#1fa876','#c46090','#7c6dcc','#b08820','#2bbfb0'];
 const CMAPS = {
   viridis:[[68,1,84],[59,28,140],[33,102,172],[29,145,192],[65,182,196],[127,205,187],[199,233,180],[253,231,37]],
   heat:   [[10,22,40],[26,95,165],[212,79,79],[253,231,37]],
@@ -478,7 +492,10 @@ const fc=document.getElementById('fc'),fx=fc.getContext('2d');
 function fitCanvas(){
   const w=document.getElementById('fwrap');
   const ww=w.clientWidth||800,wh=w.clientHeight||500;
-  if(!floorImg){fc.width=ww;fc.height=wh;return;}
+  if(!floorImg){
+    if(fc.width!==ww||fc.height!==wh){fc.width=ww; fc.height=wh; heatCache=null; lastHeatLen=0;}
+    return;
+  }
   const ar=floorImg.naturalWidth/floorImg.naturalHeight;
   let cw,ch;
   if(ww/wh>ar){ch=wh;cw=Math.round(ch*ar);}else{cw=ww;ch=Math.round(cw/ar);}
@@ -653,36 +670,106 @@ function parseCCTVCSV(text,fname){
   const lines=text.split('\n').filter(l=>l.trim());
   const hdr=lines[0].split(',').map(h=>h.replace(/"/g,'').trim());
   const fi=k=>hdr.indexOf(k);
-  const req=['cx_norm','cy_norm','person_id','frame','time_sec'];
+
+  // Detect pre-mapped CSV (already has floor_x / floor_y)
+  const preMapped = fi('floor_x')>=0 && fi('floor_y')>=0;
+  const req = preMapped ? ['person_id','time_sec'] : ['cx_norm','cy_norm','person_id','frame','time_sec'];
   const miss=req.filter(k=>fi(k)<0);
-  if(miss.length){hideProg();alert('CCTV CSV missing: '+miss.join(', '));return;}
+  if(miss.length){hideProg();alert('CCTV CSV missing columns: '+miss.join(', '));return;}
+
   cctvRows=lines.slice(1).map(l=>{
     const c=l.split(',').map(v=>v.replace(/"/g,'').trim());
-    return{frame:+c[fi('frame')]||0,time_sec:parseFloat(c[fi('time_sec')])||0,
-      datetime:c[fi('datetime')]||'',camera:c[fi('camera')]||'C1',
-      track_id:c[fi('track_id')]||'',person_id:c[fi('person_id')]||'',
-      x1:parseFloat(c[fi('x1')])||0,y1:parseFloat(c[fi('y1')])||0,
-      x2:parseFloat(c[fi('x2')])||0,y2:parseFloat(c[fi('y2')])||0,
-      cx_norm:parseFloat(c[fi('cx_norm')])||0,cy_norm:parseFloat(c[fi('cy_norm')])||0,
-      confidence:parseFloat(c[fi('confidence')])||0};
+    return{
+      frame:    fi('frame')>=0    ? (+c[fi('frame')]||0)             : 0,
+      time_sec: parseFloat(c[fi('time_sec')])||0,
+      datetime: fi('datetime')>=0 ? (c[fi('datetime')]||'')          : '',
+      camera:   fi('camera')>=0   ? (c[fi('camera')]||'C1')          : 'C1',
+      track_id: fi('track_id')>=0 ? (c[fi('track_id')]||'')          : '',
+      person_id: c[fi('person_id')]||'',
+      x1:       fi('x1')>=0       ? parseFloat(c[fi('x1')])||0       : 0,
+      y1:       fi('y1')>=0       ? parseFloat(c[fi('y1')])||0       : 0,
+      x2:       fi('x2')>=0       ? parseFloat(c[fi('x2')])||0       : 0,
+      y2:       fi('y2')>=0       ? parseFloat(c[fi('y2')])||0       : 0,
+      cx_norm:  fi('cx_norm')>=0  ? parseFloat(c[fi('cx_norm')])||0  : 0,
+      cy_norm:  fi('cy_norm')>=0  ? parseFloat(c[fi('cy_norm')])||0  : 0,
+      confidence: fi('confidence')>=0 ? parseFloat(c[fi('confidence')])||0 : 1,
+      _fx: preMapped ? parseFloat(c[fi('floor_x')])||0 : 0,
+      _fy: preMapped ? parseFloat(c[fi('floor_y')])||0 : 0,
+    };
   }).filter(r=>!isNaN(r.time_sec));
-  const seen=new Set();cctvFrames=[];
+
+  const seen=new Set(); cctvFrames=[];
   cctvRows.forEach(r=>{if(!seen.has(r.time_sec)){seen.add(r.time_sec);cctvFrames.push(r.time_sec);}});
   cctvFrames.sort((a,b)=>a-b);
   if(cctvFrames.length>1){
     const diffs=cctvFrames.slice(1).map((t,i)=>t-cctvFrames[i]).sort((a,b)=>a-b);
     cctvStride=diffs[Math.floor(diffs.length/2)];
   }
-  computeCCTVCoords();
-  document.getElementById('ccsv-info').textContent=cctvRows.length.toLocaleString()+' rows · '+cctvFrames.length+' frames';
+
+  if(preMapped){
+    // floor_x/y already in CSV — use directly, skip calibration
+    cctvFX = new Float32Array(cctvRows.map(r=>r._fx));
+    cctvFY = new Float32Array(cctvRows.map(r=>r._fy));
+    cctvAffine = {n:'pre-mapped',sx:1,sy:1,angle:0,err:0};
+    document.getElementById('ccal-status').textContent =
+      '✓ Pre-mapped CSV — floor_x/y used directly, calibration skipped';
+    mark(4); mark(5);
+    currentStep = 7;
+
+    // Pre-load ALL points into heatmap (subsampled if >60k)
+    heatPts = [];
+    const totalPts = cctvFX.length;
+    const step = totalPts > 60000 ? Math.ceil(totalPts/60000) : 1;
+    for(let i=0;i<totalPts;i+=step) heatPts.push([cctvFX[i], cctvFY[i]]);
+    lastHeatLen = 0;
+    heatCache = null;
+
+    // Pre-build track history
+    trackHistory = {};
+    for(let i=0;i<cctvRows.length;i++){
+      const pid=cctvRows[i].person_id; if(!pid)continue;
+      if(!trackHistory[pid]) trackHistory[pid]=[];
+      const th=trackHistory[pid], last=th[th.length-1];
+      const fx2=cctvFX[i], fy2=cctvFY[i];
+      if(!last||Math.hypot(fx2-last[0],fy2-last[1])>0.003)
+        th.push([+fx2.toFixed(4),+fy2.toFixed(4)]);
+    }
+
+    // Pre-build person dwell (row count per person)
+    personSecs = {};
+    cctvRows.forEach(r=>{ if(r.person_id) personSecs[r.person_id]=(personSecs[r.person_id]||0)+1; });
+
+  } else {
+    computeCCTVCoords();
+    mark(4);
+  }
+
+  const modeStr = preMapped ? ' · pre-mapped ✓' : '';
+  document.getElementById('ccsv-info').textContent =
+    cctvRows.length.toLocaleString()+' rows · '+cctvFrames.length+' frames'+modeStr;
   document.getElementById('uz-ccsv').className='upz ok';
-  document.getElementById('uz-ccsv').innerHTML=`<b>${fname}</b>${cctvRows.length.toLocaleString()} rows`;
-  hideProg();mark(4);checkNext();
+  document.getElementById('uz-ccsv').innerHTML =
+    '<b>'+fname+'</b>'+cctvRows.length.toLocaleString()+' rows'
+    +(preMapped?' <span style="color:var(--green)">· pre-mapped</span>':'');
+  hideProg(); checkNext();
+
+  // After pre-mapped load: force canvas sizing and render heatmap immediately
+  if(preMapped){
+    setTimeout(()=>{
+      if(!floorImg){
+        const wrap=document.getElementById('fwrap');
+        const ww=wrap?wrap.clientWidth:800, wh=wrap?wrap.clientHeight:600;
+        if(ww>0&&wh>0){fc.width=ww; fc.height=wh;}
+      } else {
+        fitCanvas();
+      }
+      document.getElementById('fhint').style.display='none';
+      lastHeatLen=0;
+      renderAll();
+    }, 100);
+  }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CCTV CALIBRATION
-// ═══════════════════════════════════════════════════════════════
 function loadRef(inp){
   const file=inp.files[0];if(!file)return;
   const img=new Image();
@@ -695,20 +782,85 @@ function loadRef(inp){
   };
   img.src=URL.createObjectURL(file);
 }
+// ── Video loading with canvas fallback for mp4v / unsupported codecs ──────────
+// Strategy:
+//   1. Try direct <video> src — works for H.264/H.265 with moov at front
+//   2. If that fails, use an offscreen <video> + canvas frame extraction
+//      Chrome can decode mp4v into canvas even if it can't play it via <video>
+//      We capture frames on demand and draw them to lc (the overlay canvas)
+
+let vidFile = null;          // keep File ref for canvas fallback
+let canvasFallback = false;  // true when using canvas-render mode
+let offVid = null;           // offscreen video element for canvas mode
+let vidDuration = 0;
+
 function loadVid(inp){
-  const file=inp.files[0];if(!file)return;
-  if(file.size>600*1024*1024&&!confirm('Large file ('+Math.round(file.size/1024/1024)+'MB). Continue?'))return;
-  // Wire to both the hidden lvid (for sync) and the visible lv2
-  const url=URL.createObjectURL(file);
-  lvid.src=url;lv2.src=url;
-  lvid.onloadedmetadata=()=>{
-    vidLoaded=true;
-    if(!refImg){refNW=lvid.videoWidth;refNH=lvid.videoHeight;}
+  const file=inp.files[0]; if(!file)return;
+  if(file.size>1.5*1024*1024*1024){
+    alert('File is '+Math.round(file.size/1024/1024)+'MB — too large for browser.\nTrim to session duration first, or use a reference frame image instead.');
+    return;
+  }
+  vidFile = file;
+  canvasFallback = false;
+  showProg('Loading video…', 20);
+
+  // ── Attempt 1: direct <video> element ────────────────────────────────────
+  const url = URL.createObjectURL(file);
+  lvid.src = url;
+  lvid.onloadedmetadata = () => {
+    vidLoaded = true;
+    vidDuration = lvid.duration;
+    if(!refImg){refNW=lvid.videoWidth; refNH=lvid.videoHeight;}
     document.getElementById('uz-vid').className='upz ok';
-    document.getElementById('uz-vid').innerHTML=`<b>${file.name}</b>${fmtSec(lvid.duration)}`;
+    document.getElementById('uz-vid').innerHTML='<b>'+file.name+'</b> '+fmtSec(lvid.duration);
     document.getElementById('lhint').style.display='none';
     setLeftMode('vid');
+    hideProg();
   };
+  lvid.onerror = () => {
+    // ── Attempt 2: offscreen video → canvas frame render ─────────────────
+    // mp4v (MPEG-4 Part 2) can't play in <video> but CAN be decoded into
+    // canvas via drawImage on an offscreen element in Chrome.
+    showProg('Codec not supported by <video> — trying canvas render mode…', 30);
+    URL.revokeObjectURL(url);
+
+    offVid = document.createElement('video');
+    offVid.muted = true;
+    offVid.playsInline = true;
+    offVid.preload = 'metadata';
+    const url2 = URL.createObjectURL(file);
+    offVid.src = url2;
+
+    offVid.onloadedmetadata = () => {
+      // Canvas can decode it — switch to canvas-fallback mode
+      canvasFallback = true;
+      vidLoaded = true;
+      vidDuration = offVid.duration;
+      if(!refImg){refNW=offVid.videoWidth; refNH=offVid.videoHeight;}
+      document.getElementById('uz-vid').className='upz ok';
+      document.getElementById('uz-vid').innerHTML='<b>'+file.name+'</b> '+fmtSec(offVid.duration)+' <span style="color:var(--amber)">(canvas mode)</span>';
+      document.getElementById('lhint').style.display='none';
+      // hide the <video> element, canvas does all rendering
+      lvid.style.display='none';
+      setLeftMode('vid');
+      hideProg();
+    };
+    offVid.onerror = () => {
+      hideProg();
+      alert('Video could not be loaded in any mode.\n\nYour video uses MPEG-4 Part 2 (mp4v) codec from OpenCV.\nTo fix it, run in Terminal:\nffmpeg -i "'+file.name+'" -c:v libx264 -movflags faststart "fixed_'+file.name+'"\n\nOr use a screenshot as reference frame instead of video.');
+    };
+  };
+}
+
+// Seek offscreen video to time t and grab frame onto canvas
+function syncVideo(t){
+  if(!vidLoaded) return;
+  if(canvasFallback && offVid){
+    // Seek offscreen video; frame drawn in drawCamera() via drawImage
+    if(Math.abs(offVid.currentTime - t) > 0.2) offVid.currentTime = t;
+  } else {
+    if(Math.abs(lvid.currentTime - t) > 0.3) lvid.currentTime = t;
+  }
 }
 function cNorm(nx,ny){
   // cx_norm/cy_norm are already [0,1] in camera frame
@@ -982,8 +1134,12 @@ function buildHeat(){
 function renderAll(){
   const W=fc.width,H=fc.height;if(!W||!H)return;
   fx.clearRect(0,0,W,H);
-  if(!floorImg){fx.fillStyle='#0a0d18';fx.fillRect(0,0,W,H);}
-  else if(showBG){fx.drawImage(floorImg,0,0,W,H);}
+  if(!floorImg){
+    // Dark background — still show heatmap even without a floor plan image
+    fx.fillStyle='#0a0d18';fx.fillRect(0,0,W,H);
+  } else if(showBG){
+    fx.drawImage(floorImg,0,0,W,H);
+  }
 
   // Analysis points
   if(showApt&&aptCache)fx.drawImage(aptCache,0,0);
@@ -1045,8 +1201,10 @@ function drawLive(){
   if(!cctvFX||!cctvFrames.length)return;
   const W=fc.width,H=fc.height;
   const rows=rowsAt(currentT());
-  rows.forEach((r,ri)=>{
-    const i=cctvRows.indexOf(r);if(i<0)return;
+  rows.forEach((r)=>{
+    const i=(cctvAffine&&cctvAffine.n==='pre-mapped')
+      ? Math.round(currentT()) : cctvRows.indexOf(r);
+    if(i<0||i>=cctvFX.length)return;
     const col=pidCol(r.person_id);
     const cx=cctvFX[i]*W,cy=cctvFY[i]*H;
     fx.beginPath();fx.arc(cx,cy,6,0,Math.PI*2);fx.fillStyle=col;fx.fill();
@@ -1067,10 +1225,22 @@ function drawDraft(){
 // ═══════════════════════════════════════════════════════════════
 // CCTV PLAYBACK HELPERS
 // ═══════════════════════════════════════════════════════════════
-function currentT(){return cctvFrames.length?cctvFrames[Math.min(frameIndex,cctvFrames.length-1)]:0;}
-function totalT(){return cctvFrames.length?cctvFrames[cctvFrames.length-1]:0;}
+function currentT(){
+  if(!cctvFrames.length)return 0;
+  if(cctvAffine&&cctvAffine.n==='pre-mapped') return Math.min(frameIndex,cctvFrames.length-1);
+  return cctvFrames[Math.min(frameIndex,cctvFrames.length-1)];
+}
+function totalT(){
+  if(!cctvFrames.length)return 0;
+  if(cctvAffine&&cctvAffine.n==='pre-mapped') return cctvFrames.length-1;
+  return cctvFrames[cctvFrames.length-1];
+}
 function rowsAt(t){
   if(!cctvFrames.length)return[];
+  if(cctvAffine&&cctvAffine.n==='pre-mapped'){
+    const i=Math.round(t);
+    return i>=0&&i<cctvRows.length?[cctvRows[i]]:[];
+  }
   const half=cctvStride*0.6;
   return cctvRows.filter(r=>Math.abs(r.time_sec-t)<half);
 }
@@ -1102,8 +1272,10 @@ function accumulate(){
   if(!cctvFX||!cctvFrames.length)return;
   const rows=rowsAt(currentT());
   const seenP=new Set(),seenZ=new Set();
-  rows.forEach((r,_)=>{
-    const i=cctvRows.indexOf(r);if(i<0)return;
+  rows.forEach((r)=>{
+    const i=(cctvAffine&&cctvAffine.n==='pre-mapped')
+      ? Math.round(currentT()) : cctvRows.indexOf(r);
+    if(i<0||i>=cctvFX.length)return;
     const fx2=cctvFX[i],fy2=cctvFY[i];
     heatPts.push([fx2,fy2]);if(heatPts.length>12000)heatPts.shift();heatCache=null;
     if(!trackHistory[r.person_id])trackHistory[r.person_id]=[];
@@ -1115,16 +1287,26 @@ function accumulate(){
   });
 }
 
-function syncVideo(t){
-  if(!vidLoaded)return;
-  if(Math.abs(lvid.currentTime-t)>0.3){lvid.currentTime=t;lv2.currentTime=t;}
-}
+// syncVideo defined with canvas fallback above
 
 function setPlaying(v){
   playing=v;
   const ic=document.getElementById('picon');
-  if(v){ic.className='brs';ic.innerHTML='<div class="br"></div><div class="br"></div>';setPill('p-play','● PLAYING');if(vidLoaded){const vspd=Math.min(speed,16);lvid.playbackRate=vspd;lv2.playbackRate=vspd;lvid.play().catch(()=>{});lv2.play().catch(()=>{});}}
-  else{ic.className='tri';ic.innerHTML='';setPill('p-ok','READY');if(vidLoaded){lvid.pause();lv2.pause();}}
+  if(v){
+    ic.className='brs';ic.innerHTML='<div class="br"></div><div class="br"></div>';
+    setPill('p-play','● PLAYING');
+    if(vidLoaded){
+      if(canvasFallback&&offVid){offVid.playbackRate=Math.min(speed,16);offVid.play().catch(()=>{});}
+      else{lvid.playbackRate=Math.min(speed,16);lvid.play().catch(()=>{});}
+    }
+  } else {
+    ic.className='tri';ic.innerHTML='';
+    setPill('p-ok','READY');
+    if(vidLoaded){
+      if(canvasFallback&&offVid)offVid.pause();
+      else lvid.pause();
+    }
+  }
 }
 function togglePlay(){
   if(!cctvFrames.length){alert('Load CCTV CSV first.');return;}
@@ -1146,7 +1328,7 @@ function seekClick(e){
   frameIndex=Math.max(0,Math.min(cctvFrames.length-1,ti));
   playAccum=0;if(vidLoaded)syncVideo(currentT());
 }
-function setSpeed(v){speed=parseFloat(v);if(vidLoaded&&playing)lvid.playbackRate=Math.min(speed,16);}
+function setSpeed(v){speed=parseFloat(v);if(vidLoaded&&playing){if(canvasFallback&&offVid)offVid.playbackRate=Math.min(speed,16);else lvid.playbackRate=Math.min(speed,16);}}
 function resetAccum(){heatPts=[];heatCache=null;lastHeatLen=0;trackHistory={};personSecs={};zoneSecs={};playAccum=0;}
 
 // ═══════════════════════════════════════════════════════════════
@@ -1156,9 +1338,12 @@ function updateUI(){
   const t=currentT(),dur=totalT(),pct=dur>0?Math.min(t/dur*100,100):0;
   document.getElementById('tlf').style.width=pct.toFixed(1)+'%';
   document.getElementById('tlth').style.left=pct.toFixed(1)+'%';
-  document.getElementById('tslbl').textContent=fmtSec(t)+' / '+fmtSec(dur);
+  const isPreMapped=cctvAffine&&cctvAffine.n==='pre-mapped';
+  document.getElementById('tslbl').textContent=isPreMapped
+    ?(Math.round(t)+' / '+(cctvFrames.length-1)+' rows')
+    :(fmtSec(t)+' / '+fmtSec(dur));
   const rows=rowsAt(t);
-  document.getElementById('ts-disp').textContent=rows[0]?.datetime||fmtSec(t);
+  document.getElementById('ts-disp').textContent=rows[0]?.datetime||rows[0]?.time_sec||fmtSec(t);
 
   // Person dwell
   const persons=[...new Set(cctvRows.map(r=>r.person_id))].filter(p=>p&&p!=='Noise'&&p!=='Skip');
@@ -1357,7 +1542,8 @@ function exportCCTVCSV(){
   showProg('Writing CCTV CSV…',50);
   setTimeout(()=>{
     const extraCols=['floor_x','floor_y','zone','zone_type'];
-    const origHdr=Object.keys(cctvRows[0]).filter(k=>!['floor_x','floor_y','zone','zone_type'].includes(k));
+    const origHdr=['frame','time_sec','datetime','camera','track_id','person_id',
+                    'x1','y1','x2','y2','cx_norm','cy_norm','confidence'];
     const hdr=[...origHdr,...extraCols].join(',');
     const rows=cctvRows.map((r,i)=>{
       const zi=zoneOfAll(cctvFX[i],cctvFY[i]);
@@ -1388,7 +1574,9 @@ function exportMergedCSV(){
     const AN=aptX.length;
     const afx=aptFX, afy=aptFY;
 
-    const origHdr=Object.keys(cctvRows[0]);
+    // Explicit column order matching how cctvRows were parsed
+    const origHdr=['frame','time_sec','datetime','camera','track_id','person_id',
+                   'x1','y1','x2','y2','cx_norm','cy_norm','confidence'];
     const extraCols=['floor_x','floor_y','zone','zone_type',...aptMetrics];
     const hdr=[...origHdr,...extraCols].join(',');
     const outRows=[];
@@ -1428,21 +1616,32 @@ function exportMergedCSV(){
 
 // ── Camera panel JS ──────────────────────────────────────────────────────────
 const lc2=document.getElementById('lc');
-const lv2=document.getElementById('lv');
+// lv2 alias points to lvid (single video element)
 let leftMode2='img';
-let showCBBox=true;
+let showCBBox=true, showCDot=true;
 
 function setLeftMode(mode){
   leftMode2=mode;
   document.getElementById('tab-img').className='mb'+(mode==='img'?' on':'');
   document.getElementById('tab-vid').className='mb'+(mode==='vid'?' on':'');
-  lc2.style.display=mode==='img'?'block':'none';
-  lv2.style.display=mode==='vid'&&vidLoaded?'block':'none';
+  // In image mode: show canvas (with refImg drawn), hide video
+  // In video mode: show video, canvas stays on top as transparent overlay for bbox
+  if(mode==='img'){
+    lc2.style.position='relative';
+    lc2.style.top=''; lc2.style.left=''; lc2.style.width=''; lc2.style.height='';
+    lvid.style.display='none';
+    fitLeftCanvas();
+  } else {
+    lvid.style.display=vidLoaded?'block':'none';
+    lc2.style.position='absolute';
+    lc2.style.top='0'; lc2.style.left='0';
+  }
   document.getElementById('lhint').style.display=(mode==='img'&&!refImg)?'':'none';
 }
 
 function togCam(m){
   if(m==='bbox'){showCBBox=!showCBBox;document.getElementById('mb-cbbox').className='mb'+(showCBBox?' on':'');}
+  if(m==='dot') {showCDot=!showCDot;  document.getElementById('mb-cdot').className='mb'+(showCDot?' on':'');}
 }
 
 function fitLeftCanvas(){
@@ -1461,14 +1660,30 @@ function drawCamera(){
   const ctx=lc2.getContext('2d');
   ctx.clearRect(0,0,W,H);
   if(leftMode2==='vid'&&vidLoaded){
-    lc2.style.display='block';
-    // overlay canvas on video for bboxes
-    const vr=lv2.getBoundingClientRect(),lr=document.getElementById('lwrap').getBoundingClientRect();
-    const vw=Math.round(vr.width),vh=Math.round(vr.height);
-    if(lc2.width!==vw||lc2.height!==vh){lc2.width=vw;lc2.height=vh;}
-    lc2.style.position='absolute';
-    lc2.style.left=Math.round(vr.left-lr.left)+'px';
-    lc2.style.top=Math.round(vr.top-lr.top)+'px';
+    if(canvasFallback && offVid){
+      // Canvas fallback: draw video frames directly onto lc2
+      // Size canvas to video natural dimensions (capped to panel)
+      const wrap=document.getElementById('lwrap');
+      const maxW=wrap.clientWidth||400, maxH=wrap.clientHeight||300;
+      const vw=offVid.videoWidth||refNW, vh=offVid.videoHeight||refNH;
+      const ar=vw/vh;
+      let cw,ch;
+      if(maxW/maxH>ar){ch=maxH;cw=Math.round(ch*ar);}else{cw=maxW;ch=Math.round(cw/ar);}
+      if(lc2.width!==cw||lc2.height!==ch){lc2.width=cw;lc2.height=ch;}
+      lc2.style.position='relative';
+      lc2.style.left='';lc2.style.top='';
+      lc2.style.width=cw+'px';lc2.style.height=ch+'px';
+      // Draw current video frame
+      try{ctx.drawImage(offVid,0,0,cw,ch);}catch(e){}
+    } else {
+      // Normal mode: lc2 is transparent overlay on top of <video> element
+      const vr=lvid.getBoundingClientRect(),lr=document.getElementById('lwrap').getBoundingClientRect();
+      const vw=Math.round(vr.width),vh=Math.round(vr.height);
+      if(vw>0&&vh>0&&(lc2.width!==vw||lc2.height!==vh)){lc2.width=vw;lc2.height=vh;}
+      lc2.style.left=Math.round(vr.left-lr.left)+'px';
+      lc2.style.top=Math.round(vr.top-lr.top)+'px';
+      lc2.style.width=vw+'px'; lc2.style.height=vh+'px';
+    }
   } else {
     lc2.style.position='relative';
     lc2.style.left='';lc2.style.top='';
@@ -1478,18 +1693,28 @@ function drawCamera(){
       ctx.fillStyle='rgba(0,0,0,.10)';ctx.fillRect(0,0,W,H);
     }else{ctx.fillStyle='#03050d';ctx.fillRect(0,0,W,H);}
   }
-  // BBox overlay
-  if(showCBBox&&cctvFX&&cctvFrames.length){
+  // BBox overlay — scale from original image pixels to canvas pixels
+  if((showCBBox||showCDot)&&cctvFrames.length){
     const t=currentT(),half=cctvStride*0.6;
     const rows=cctvRows.filter(r=>Math.abs(r.time_sec-t)<half);
-    const scx=W/refNW,scy=H/refNH;
+    // W,H is the canvas size; refNW,refNH is the original image/video resolution
+    const scx=W/refNW, scy=H/refNH;
     rows.forEach(r=>{
       const col=pidCol(r.person_id);
-      const bx=r.x1*scx,by=r.y1*scy,bw=(r.x2-r.x1)*scx,bh=(r.y2-r.y1)*scy;
-      ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.strokeRect(bx,by,bw,bh);
-      ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(bx,by-12,Math.max(bw,52),11);
-      ctx.fillStyle=col;ctx.font='bold 7px monospace';ctx.textAlign='center';
-      ctx.fillText(r.person_id,bx+bw/2,by-3);
+      const bx=r.x1*scx, by=r.y1*scy, bw=(r.x2-r.x1)*scx, bh=(r.y2-r.y1)*scy;
+      // Centre point from bbox midpoint (same coordinate system)
+      const cx=bx+bw/2, cy=by+bh/2;
+      if(showCBBox){
+        ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.strokeRect(bx,by,bw,bh);
+        const lblY=Math.max(by-3,11), lblX=Math.max(Math.min(bx+bw/2,W-28),28);
+        ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(lblX-27,lblY-10,54,11);
+        ctx.fillStyle=col;ctx.font='bold 7px monospace';ctx.textAlign='center';
+        ctx.fillText(r.person_id,lblX,lblY);
+      }
+      if(showCDot){
+        ctx.beginPath();ctx.arc(cx,cy,4,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
+        ctx.beginPath();ctx.arc(cx,cy,7,0,Math.PI*2);ctx.strokeStyle=col+'55';ctx.lineWidth=1;ctx.stroke();
+      }
     });
   }
   // Timestamp
@@ -1512,11 +1737,13 @@ function renderWiz(){
   }
 }
 function stepReady(n){
+  // Pre-mapped CCTV CSV (has floor_x/floor_y) — floor plan and CCTV calibration are optional
+  const cPreMapped = cctvAffine && cctvAffine.n==='pre-mapped';
   if(n===1)return !!aptX;
-  if(n===2)return !!floorImg;
-  if(n===3)return !!aptAffine;
+  if(n===2)return !!floorImg || cPreMapped; // floor plan optional if CCTV pre-mapped
+  if(n===3)return !!aptAffine || cPreMapped; // analysis cal optional if CCTV pre-mapped
   if(n===4)return cctvRows.length>0;
-  if(n===5)return !!cctvAffine;
+  if(n===5)return !!cctvAffine; // satisfied by pre-mapped CSV
   if(n===6)return userZones.length>0;
   if(n===7)return cctvFrames.length>0;
   return true;
@@ -1531,13 +1758,14 @@ function checkNext(){
 }
 function nextStep(){
   if(!stepReady(currentStep)){
+    const cPreMapped = cctvAffine && cctvAffine.n==='pre-mapped';
     const h={
       1:'Load the space analysis CSV first.',
-      2:'Upload a floor plan image first.',
-      3:'Open the analysis calibration window and add ≥3 pairs, then Apply.',
-      4:'Load the CCTV CSV (or skip to Step 6 for analysis-only).',
+      2:cPreMapped?'':'Upload a floor plan image first.',
+      3:cPreMapped?'':'Open the analysis calibration window and add ≥3 pairs, then Apply.',
+      4:'Load the CCTV CSV — your merged/session CSV with floor_x/floor_y works directly.',
       5:'Open the CCTV calibration window and add ≥3 pairs, then Apply.',
-      6:'Draw and save at least one zone first.',
+      6:'Draw and save at least one zone first (optional, can skip).',
       7:'CCTV data is needed for replay.',
     };
     if(h[currentStep])alert(h[currentStep]);
@@ -1560,7 +1788,7 @@ function resetAll(){
   aptHeaders=[];aptMetrics=[];aCalSrc=[];aCalDst=[];activeMetric='';aptCache=null;
   floorImg=null;
   cctvRows=[];cctvFrames=[];cctvFX=cctvFY=cctvAffine=null;
-  cCalSrc=[];cCalDst=[];refImg=null;vidLoaded=false;lvid.src='';
+  cCalSrc=[];cCalDst=[];refImg=null;vidLoaded=false;canvasFallback=false;if(offVid){offVid.pause();offVid.src='';offVid=null;}vidDuration=0;lvid.src='';
   resetAccum();heatCache=null;frameIndex=0;
   userZones=[];zoneDraft=[];pendingZone=null;
   activeTypeFilters=new Set(['all','Private','Semi-public','Public']);
@@ -1591,9 +1819,49 @@ function fmtSec(s){s=Math.max(0,s||0);const h=Math.floor(s/3600),m=Math.floor(s%
 function setPill(cls,txt){const p=document.getElementById('pill');p.className='pill '+cls;p.textContent=txt;}
 
 // ═══════════════════════════════════════════════════════════════
+// RESIZER
+// ═══════════════════════════════════════════════════════════════
+function initResizer(resizerId, leftId, rightId, side){
+  const resizer=document.getElementById(resizerId);
+  if(!resizer)return;
+  let startX, startLeftW, startRightW;
+  resizer.addEventListener('mousedown',e=>{
+    startX=e.clientX;
+    startLeftW=document.getElementById(leftId).offsetWidth;
+    startRightW=document.getElementById(rightId).offsetWidth;
+    resizer.classList.add('dragging');
+    document.body.style.cursor='col-resize';
+    document.body.style.userSelect='none';
+    function onMove(e){
+      const dx=e.clientX-startX;
+      const newLeft=Math.max(120,startLeftW+dx);
+      const newRight=Math.max(200,startRightW-dx);
+      document.getElementById(leftId).style.width=newLeft+'px';
+      document.getElementById(leftId).style.flex='0 0 '+newLeft+'px';
+      if(side==='right'){
+        document.getElementById(rightId).style.width=newRight+'px';
+        document.getElementById(rightId).style.flex='0 0 '+newRight+'px';
+      }
+      fitCanvas();fitLeftCanvas();
+    }
+    function onUp(){
+      resizer.classList.remove('dragging');
+      document.body.style.cursor='';document.body.style.userSelect='';
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+    }
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+    e.preventDefault();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
 renderWiz();checkNext();renderAll();startLoop();
+initResizer('resizer1','cam-panel','floor-panel','left');
+initResizer('resizer2','sidebar','floor-panel','right');
 </script>
 </body>
 </html>
