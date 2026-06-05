@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Heatmap Viewer</title>
+<style>
+:root{
+  --bg:#07090f;--surf:#0d1018;--surf2:#13161f;--surf3:#191d28;
+  --bd:rgba(255,255,255,.05);--bd2:rgba(255,255,255,.10);
+  --text:#c8d4e8;--muted:#3d4a5e;
+  --cyan:#2bbfb0;--green:#1fa876;--red:#d44f4f;--amber:#d4961e;--blue:#4c9fd4;--purple:#7c6dcc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono',ui-monospace,monospace;font-size:11px;display:flex;flex-direction:column}
+
+#top{display:flex;align-items:center;gap:8px;padding:0 12px;height:38px;background:var(--surf);border-bottom:1px solid var(--bd);flex-shrink:0}
+.logo{font-size:11px;font-weight:700;color:#dde6f5}.logo em{color:var(--cyan);font-style:normal}
+.pill{font-size:9px;padding:1px 7px;border-radius:10px;border:1px solid;font-weight:600;white-space:nowrap}
+.p-idle{color:var(--muted);border-color:var(--muted)}
+.p-ok{color:var(--green);border-color:var(--green)}
+.p-busy{color:var(--amber);border-color:var(--amber);animation:blink .7s infinite}
+.p-play{color:#f87171;border-color:#f87171;animation:blink 1s infinite}
+
+#main{display:flex;flex:1;min-height:0;gap:1px;background:var(--bd)}
+
+#canvas-wrap{flex:1;min-width:0;background:#03050d;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#canvas-wrap canvas{display:block;max-width:100%;max-height:100%}
+.canvas-hint{position:absolute;text-align:center;color:var(--muted);font-size:11px;line-height:1.9;pointer-events:none}
+
+#panel{width:240px;flex-shrink:0;background:var(--bg);display:flex;flex-direction:column;overflow-y:auto}
+.sec{padding:9px 11px;flex-shrink:0;border-bottom:1px solid var(--bd)}
+.sbt{font-size:7.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+
+.upz{border:1px dashed rgba(255,255,255,.08);border-radius:4px;padding:7px 9px;text-align:center;cursor:pointer;color:var(--muted);font-size:10px;line-height:1.8;transition:all .2s;margin-bottom:4px}
+.upz:hover{border-color:var(--blue);color:var(--blue)}
+.upz.ok{border-color:var(--green);color:var(--green);border-style:solid}
+.upz b{display:block;font-size:10px;font-weight:700;margin-bottom:1px}
+input[type=file]{display:none}
+
+.crow{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.crow label{font-size:9px;color:var(--muted);width:68px;flex-shrink:0}
+.crow select,.crow input[type=number],.crow input[type=range]{flex:1;font-size:9px;background:var(--surf3);color:var(--text);border:1px solid var(--bd2);border-radius:3px;padding:2px 4px;font-family:inherit;min-width:0}
+.crow input[type=checkbox]{width:13px;height:13px;accent-color:var(--cyan);cursor:pointer}
+
+.mbtns{display:flex;gap:3px;flex-wrap:wrap}
+.mb{font-size:8px;padding:1px 6px;border-radius:3px;border:1px solid var(--bd2);color:var(--muted);cursor:pointer;background:transparent;white-space:nowrap;font-family:inherit}
+.mb:hover{border-color:var(--text);color:var(--text)}
+.mb.on{border-color:var(--cyan);color:var(--cyan);background:rgba(43,191,176,.08)}
+
+#filter-wrap,#type-wrap,#sess-wrap{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px}
+.ftag{font-size:9px;padding:1px 7px;border-radius:8px;border:1px solid var(--bd2);color:var(--muted);cursor:pointer;background:transparent;font-family:inherit;transition:all .15s}
+.ftag.on{border-color:var(--cyan);color:var(--cyan);background:rgba(43,191,176,.09)}
+
+.prow{display:flex;align-items:center;gap:5px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.03)}
+.prow:last-child{border:none}
+.pdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.pnm{font-size:9px;width:40px;color:#8892a6;font-family:monospace}
+.bb{flex:1;height:3px;background:var(--surf3);border-radius:2px;overflow:hidden}
+.bf{height:100%;border-radius:2px}
+.bv{font-size:8px;color:var(--muted);min-width:28px;text-align:right}
+
+#legbar{width:100%;height:7px;border-radius:3px;margin:4px 0 2px}
+.leglab{display:flex;justify-content:space-between;font-size:8px;color:var(--muted)}
+
+.btn{display:block;width:100%;padding:4px 8px;border-radius:3px;border:1px solid var(--bd2);background:var(--surf2);color:var(--text);cursor:pointer;font-size:9px;font-family:inherit;text-align:center;margin-top:3px}
+.btn:hover{border-color:var(--blue);color:var(--blue)}
+.btn-r{color:var(--red);border-color:rgba(212,79,79,.3)}.btn-r:hover{background:rgba(212,79,79,.08)}
+
+/* playback bar */
+#ctrlbar{display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--surf);border-top:1px solid var(--bd);flex-shrink:0}
+.pbtn{width:22px;height:22px;border-radius:50%;border:1px solid var(--bd2);background:var(--surf3);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pbtn:hover{border-color:var(--cyan)}
+.tri{width:0;height:0;border:4px solid transparent;border-left:7px solid var(--text);margin-left:2px}
+.brs{display:flex;gap:2px}.br{width:2px;height:7px;background:var(--text);border-radius:1px}
+.tlt{flex:1;height:4px;background:var(--surf3);border-radius:2px;cursor:pointer;position:relative;min-width:60px}
+.tlf{height:100%;background:var(--cyan);border-radius:2px}
+.tlth{position:absolute;width:8px;height:8px;border-radius:50%;background:var(--cyan);top:50%;transform:translate(-50%,-50%);pointer-events:none}
+.tslbl{font-size:9px;color:var(--muted);font-family:monospace;white-space:nowrap;min-width:100px;text-align:right}
+.spdsel{font-size:9px;background:var(--surf3);color:var(--text);border:1px solid var(--bd2);border-radius:3px;padding:1px 4px;height:20px;font-family:inherit}
+
+#prog{display:none;position:fixed;inset:0;background:rgba(4,6,14,.9);z-index:100;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+#prog.show{display:flex}
+#prog-track{width:260px;height:5px;background:var(--surf3);border-radius:3px;overflow:hidden}
+#prog-fill{height:100%;background:var(--cyan);border-radius:3px;width:0%;transition:width .1s}
+#prog-lbl{font-size:10px;color:var(--muted)}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <span class="logo">Heat<em>map</em> Viewer</span>
+  <span class="pill p-idle" id="pill">IDLE</span>
+  <span id="ts-disp" style="font-size:9px;color:var(--cyan);margin-left:6px;font-family:monospace"></span>
+</div>
+
+<div id="main">
+  <div id="canvas-wrap">
+    <canvas id="cv"></canvas>
+    <div class="canvas-hint" id="hint">Upload a CSV with <b style="color:var(--text)">floor_x</b> and <b style="color:var(--text)">floor_y</b> columns</div>
+  </div>
+
+  <div id="panel">
+
+    <div class="sec">
+      <div class="sbt">Data</div>
+      <div class="upz" id="uz-csv" onclick="document.getElementById('fi-csv').click()">
+        <b>CSV file</b>needs floor_x · floor_y
+      </div>
+      <input type="file" id="fi-csv" accept=".csv" onchange="loadCSV(this)">
+      <div class="upz" id="uz-floor" onclick="document.getElementById('fi-floor').click()">
+        <b>Floor plan</b>PNG · JPG (optional)
+      </div>
+      <input type="file" id="fi-floor" accept="image/*" onchange="loadFloor(this)">
+      <div style="font-size:8px;color:var(--muted);margin-top:3px;line-height:1.6" id="data-info">Awaiting CSV…</div>
+    </div>
+
+    <div class="sec" id="filter-sec" style="display:none">
+      <div class="sbt">Filter by person</div>
+      <div id="filter-wrap"></div>
+      <div class="sbt" style="margin-top:6px">Zone type</div>
+      <div id="type-wrap"></div>
+      <div class="sbt" style="margin-top:6px">Session / Day</div>
+      <div id="sess-wrap"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sbt">Display</div>
+      <div class="mbtns" style="margin-bottom:5px">
+        <div class="mb on" id="mb-heat"  onclick="togL('heat')">Heat</div>
+        <div class="mb on" id="mb-track" onclick="togL('track')">Tracks</div>
+        <div class="mb on" id="mb-live"  onclick="togL('live')">Live dots</div>
+        <div class="mb on" id="mb-bg"    onclick="togL('bg')">BG</div>
+      </div>
+
+      <!-- Mode: standard heat vs bivariate -->
+      <div class="crow" style="margin-bottom:6px"><label>Mode</label>
+        <select id="mode-sel" onchange="setMode(this.value)">
+          <option value="standard">Standard heatmap</option>
+          <option value="bivariate">Bivariate (density × metric)</option>
+        </select>
+      </div>
+
+      <!-- Standard mode controls -->
+      <div id="std-controls">
+        <div class="crow"><label>Colour map</label>
+          <select id="cmap" onchange="heatDirty=true">
+            <option value="heat">Heat</option>
+            <option value="viridis">Viridis</option>
+            <option value="plasma">Plasma</option>
+            <option value="rdylgn">RdYlGn</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Bivariate mode controls -->
+      <div id="biv-controls" style="display:none">
+        <div class="crow"><label>X axis</label>
+          <select id="biv-x" onchange="heatDirty=true">
+            <option value="">— density only —</option>
+          </select>
+        </div>
+        <div class="crow"><label>Y axis</label>
+          <select id="biv-y" onchange="heatDirty=true">
+            <option value="">— none —</option>
+          </select>
+        </div>
+        <div style="font-size:8px;color:var(--muted);line-height:1.5;margin-bottom:4px">
+          X = spatial metric (e.g. Integration HH)<br>
+          Y = usage density (visit count)
+        </div>
+        <!-- 2D legend canvas -->
+        <canvas id="biv-legend" width="90" height="90" style="display:block;margin:4px 0;border-radius:3px"></canvas>
+        <div style="display:grid;grid-template-columns:90px auto;gap:2px;font-size:7px;color:var(--muted);line-height:1.4;margin-bottom:4px">
+          <span>↑ High density</span><span></span>
+          <span>↓ Low density</span><span style="text-align:right">→ High metric</span>
+        </div>
+      </div>
+
+      <div class="crow"><label>Radius</label>
+        <input type="range" id="radius" min="1" max="8" step="0.5" value="3" oninput="heatDirty=true">
+      </div>
+      <div class="crow"><label>Heat opacity</label>
+        <input type="range" id="opacity" min="0.1" max="1" step="0.05" value="0.82">
+      </div>
+      <div class="crow" id="hue-row"><label>Heat hue</label>
+        <input type="range" id="heat-hue" min="0" max="360" step="1" value="0" oninput="heatDirty=true;renderLegend()" title="Rotate all heatmap colours by this hue offset">
+      </div>
+      <canvas id="legbar" width="200" height="7"></canvas>
+      <div class="leglab"><span>Low</span><span>High</span></div>
+      <div class="sbt" style="margin-top:8px">Tracks</div>
+      <div class="crow"><label>Track width</label>
+        <input type="range" id="track-width" min="0.5" max="6" step="0.5" value="1.4">
+      </div>
+      <div class="crow"><label>Track opacity</label>
+        <input type="range" id="track-opacity" min="0.05" max="1" step="0.05" value="0.53">
+      </div>
+      <div class="crow"><label>Dot size</label>
+        <input type="range" id="dot-size" min="2" max="12" step="0.5" value="6">
+      </div>
+    </div>
+
+    <div class="sec" id="dwell-sec" style="display:none">
+      <div class="sbt">Person dwell (frames visible)</div>
+      <div id="plist"></div>
+    </div>
+
+    <div class="sec">
+      <button class="btn" onclick="savePNG()">Save PNG</button>
+      <button class="btn btn-r" onclick="resetAll()">Reset</button>
+    </div>
+
+  </div>
+</div>
+
+<div id="ctrlbar">
+  <div class="pbtn" onclick="togglePlay()"><div id="picon" class="tri"></div></div>
+  <div class="pbtn" onclick="stepFrame(-1)"><span style="font-size:9px;color:var(--text)">◀</span></div>
+  <div class="pbtn" onclick="stepFrame(1)"><span style="font-size:9px;color:var(--text)">▶</span></div>
+  <div class="pbtn" onclick="clearAndReset()" title="Clear heat and restart from beginning"><span style="font-size:10px;color:var(--muted)">↺</span></div>
+  <div class="tlt" id="tlt" onclick="seekClick(event)">
+    <div class="tlf" id="tlf" style="width:0%"></div>
+    <div class="tlth" id="tlth" style="left:0%"></div>
+  </div>
+  <span class="tslbl" id="tslbl">— / —</span>
+  <select class="spdsel" onchange="setSpeed(this.value)">
+    <option value="0.5">0.5×</option>
+    <option value="1" selected>1×</option>
+    <option value="2">2×</option>
+    <option value="5">5×</option>
+    <option value="10">10×</option>
+    <option value="50">50×</option>
+    <option value="100">100×</option>
+    <option value="500">500×</option>
+  </select>
+</div>
+
+<div id="prog">
+  <div id="prog-lbl">Loading…</div>
+  <div id="prog-track"><div id="prog-fill"></div></div>
+</div>
+
+<script>
+// ── Colour maps ───────────────────────────────────────────────────────────────
+const CMAPS={
+  heat:   [[10,22,40],[26,95,165],[212,79,79],[253,231,37]],
+  viridis:[[68,1,84],[59,28,140],[33,102,172],[29,145,192],[65,182,196],[127,205,187],[253,231,37]],
+  plasma: [[13,8,135],[84,2,163],[139,10,165],[185,50,137],[219,92,104],[244,136,73],[240,249,33]],
+  rdylgn: [[165,0,38],[215,48,39],[253,174,97],[255,255,191],[166,217,106],[26,152,80],[0,104,55]],
+};
+const PCOLS=['#4c9fd4','#d4724c','#1fa876','#c46090','#7c6dcc','#b08820','#2bbfb0','#d44f4f','#e09b25','#5a9e3a'];
+
+// Hue-rotate an RGB colour by `deg` degrees
+function hueShift([r,g,b], deg){
+  if(!deg||deg===0)return[r,g,b];
+  // Convert to HSL, rotate H, convert back
+  r/=255;g/=255;b/=255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
+  let h=0,s=0,l=(mx+mn)/2;
+  if(d>0){
+    s=d/(1-Math.abs(2*l-1));
+    if(mx===r)h=((g-b)/d+6)%6;
+    else if(mx===g)h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    h/=6;
+  }
+  h=(h+deg/360)%1; if(h<0)h+=1;
+  const q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q;
+  function hue2rgb(t){if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;}
+  return[Math.round(hue2rgb(h+1/3)*255),Math.round(hue2rgb(h)*255),Math.round(hue2rgb(h-1/3)*255)];
+}
+
+function cmapColor(t,name){
+  const s=CMAPS[name]||CMAPS.heat;
+  t=Math.max(0,Math.min(1,t));
+  const seg=(s.length-1)*t,i=Math.min(Math.floor(seg),s.length-2),f=seg-i;
+  const a=s[i],b=s[i+1];
+  return[Math.round(a[0]+(b[0]-a[0])*f),Math.round(a[1]+(b[1]-a[1])*f),Math.round(a[2]+(b[2]-a[2])*f)];
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let allRows=[];      // all parsed rows
+let frames=[];       // [{key, rows:[]}] — grouped by (day+session+time_sec)
+let frameIndex=0;
+
+let floorImg=null;
+let heatPts=[];      // accumulated [fx,fy] pairs
+let heatCanvas=null;
+let heatDirty=true;
+let trackHistory={}; // {person_id: [[fx,fy],...]}
+let personFrames={}; // {person_id: count}
+
+let playing=false,speed=1,playAccum=0;
+let loopId=null,lastMs=null;
+
+// Filters
+let activePids=new Set(),activeTypes=new Set(),activeSess=new Set();
+let allPids=[],allTypes=[],allSess=[];
+let pidColors={};
+
+// Layers
+let showHeat=true,showTrack=true,showLive=true,showBG=true;
+
+// Bivariate mode
+let bivMode=false;
+let analysisCols=[];  // numeric cols beyond floor_x/y/person etc.
+
+// ── Canvas ────────────────────────────────────────────────────────────────────
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+
+function fitCanvas(){
+  const wrap=document.getElementById('canvas-wrap');
+  const ww=wrap.clientWidth||800,wh=wrap.clientHeight||600;
+  if(!floorImg){if(cv.width!==ww||cv.height!==wh){cv.width=ww;cv.height=wh;heatDirty=true;}return;}
+  const ar=floorImg.naturalWidth/floorImg.naturalHeight;
+  let cw,ch;
+  if(ww/wh>ar){ch=wh;cw=Math.round(ch*ar);}else{cw=ww;ch=Math.round(cw/ar);}
+  if(cv.width!==cw||cv.height!==ch){cv.width=cw;cv.height=ch;heatDirty=true;}
+}
+window.addEventListener('load',fitCanvas);
+window.addEventListener('resize',()=>{fitCanvas();heatDirty=true;});
+
+// ── Progress ──────────────────────────────────────────────────────────────────
+function showProg(lbl,pct){
+  document.getElementById('prog').classList.add('show');
+  document.getElementById('prog-lbl').textContent=lbl;
+  document.getElementById('prog-fill').style.width=Math.round(pct)+'%';
+}
+function hideProg(){document.getElementById('prog').classList.remove('show');}
+
+// ── CSV Load ──────────────────────────────────────────────────────────────────
+function loadCSV(inp){
+  const file=inp.files[0];if(!file)return;
+  showProg('Reading CSV…',5);setPill('p-busy','LOADING');
+  const reader=new FileReader();
+  reader.onload=e=>setTimeout(()=>parseCSV(e.target.result,file.name),30);
+  reader.readAsText(file);
+}
+
+function parseCSV(text,fname){
+  const lines=text.split('\n');
+  const hdr=lines[0].split(',').map(h=>h.replace(/"/g,'').trim());
+  const fi=k=>hdr.indexOf(k);
+  if(fi('floor_x')<0||fi('floor_y')<0){
+    hideProg();alert('CSV must have floor_x and floor_y columns.');return;
+  }
+  const CHUNK=20000;
+  let row=1;allRows=[];
+  function step(){
+    const end=Math.min(row+CHUNK,lines.length);
+    for(;row<end;row++){
+      const line=lines[row];if(!line||!line.trim())continue;
+      const c=line.split(',').map(v=>v.replace(/"/g,'').trim());
+      const fx=parseFloat(c[fi('floor_x')]);
+      const fy=parseFloat(c[fi('floor_y')]);
+      if(isNaN(fx)||isNaN(fy))continue;
+      const rowObj={
+        floor_x:fx, floor_y:fy,
+        person_id: fi('person_id')>=0?c[fi('person_id')]||'':'',
+        zone:      fi('zone')>=0?c[fi('zone')]||'':'',
+        zone_type: fi('zone_type')>=0?c[fi('zone_type')]||'':'',
+        session:   fi('session')>=0?c[fi('session')]||'':'',
+        day:       fi('day')>=0?c[fi('day')]||'':'',
+        datetime:  fi('datetime')>=0?c[fi('datetime')]||'':'',
+        time_sec:  fi('time_sec')>=0?parseFloat(c[fi('time_sec')])||0:0,
+      };
+      // Parse ALL numeric columns for bivariate analysis
+      hdr.forEach((h,idx)=>{
+        if(!(h in rowObj)){
+          const v=parseFloat(c[idx]);
+          if(!isNaN(v))rowObj[h]=v;
+        }
+      });
+      allRows.push(rowObj);
+    }
+    showProg('Parsing… '+Math.round(row/lines.length*88+8)+'%',row/lines.length*88+8);
+    if(row<lines.length){setTimeout(step,0);return;}
+    setTimeout(()=>finishLoad(fname),30);
+  }
+  step();
+}
+
+function finishLoad(fname){
+  // Group into frames by (day + session + time_sec)
+  // This handles multi-day CSVs where time_sec resets each day
+  const frameMap=new Map();
+  allRows.forEach(r=>{
+    const key=`${r.day}|${r.session}|${r.time_sec}`;
+    if(!frameMap.has(key))frameMap.set(key,[]);
+    frameMap.get(key).push(r);
+  });
+  // Sort frames by day then session then time_sec
+  frames=[...frameMap.entries()].map(([key,rows])=>({key,rows}));
+  frames.sort((a,b)=>{
+    const [ad,as,at]=a.key.split('|');
+    const [bd,bs,bt]=b.key.split('|');
+    if(ad!==bd)return ad.localeCompare(bd);
+    if(as!==bs)return as.localeCompare(bs);
+    return parseFloat(at)-parseFloat(bt);
+  });
+
+  // Extract unique filter values
+  allPids =[...new Set(allRows.map(r=>r.person_id))].filter(Boolean).sort();
+  allTypes=[...new Set(allRows.map(r=>r.zone_type))].filter(Boolean).sort();
+  // Session filter: day+session combos
+  allSess=[...new Set(allRows.map(r=>r.day+'|'+r.session))].filter(Boolean).sort();
+
+  allPids.forEach((p,i)=>{pidColors[p]=PCOLS[i%PCOLS.length];});
+  activePids=new Set(allPids);
+  activeTypes=new Set(allTypes.length?allTypes:['_all_']);
+  activeSess=new Set(allSess.length?allSess:['_all_']);
+
+  frameIndex=0;
+  heatPts=[];heatCanvas=null;heatDirty=true;
+  trackHistory={};personFrames={};
+
+  // Detect numeric analysis columns
+  const skipCols=new Set(['frame','time_sec','x1','y1','x2','y2','cx_norm','cy_norm',
+    'confidence','floor_x','floor_y','track_id','day','mission_day']);
+  const firstRow=allRows[0]||{};
+  analysisCols=Object.keys(firstRow).filter(k=>
+    !skipCols.has(k)&&typeof firstRow[k]==='number'&&!isNaN(firstRow[k])
+  );
+  // Populate bivariate dropdowns
+  const bx=document.getElementById('biv-x');
+  const by=document.getElementById('biv-y');
+  bx.innerHTML='<option value="">— select metric —</option>'+
+    analysisCols.map(c=>`<option value="${c}">${c}</option>`).join('');
+  by.innerHTML='<option value="density">Usage density (visit count)</option>'+
+    analysisCols.map(c=>`<option value="${c}">${c}</option>`).join('');
+  // Set sensible defaults
+  const defMetric=analysisCols.find(c=>c.includes('integration'))||analysisCols[0]||''
+  if(defMetric) bx.value=defMetric;
+
+  buildFilterUI();
+  document.getElementById('uz-csv').className='upz ok';
+  document.getElementById('uz-csv').innerHTML=`<b>${fname}</b>${allRows.length.toLocaleString()} rows · ${frames.length} frames`;
+  document.getElementById('data-info').textContent=`${allPids.length} persons · ${frames.length} frames`;
+  document.getElementById('filter-sec').style.display='';
+  document.getElementById('dwell-sec').style.display='';
+  document.getElementById('hint').style.display='none';
+  hideProg();setPill('p-ok','LOADED');
+  renderLegend();
+  fitCanvas();
+}
+
+// ── Floor plan ────────────────────────────────────────────────────────────────
+function loadFloor(inp){
+  const file=inp.files[0];if(!file)return;
+  const img=new Image();
+  img.onload=()=>{
+    floorImg=img;
+    document.getElementById('uz-floor').className='upz ok';
+    document.getElementById('uz-floor').innerHTML=`<b>${file.name}</b>${img.naturalWidth}×${img.naturalHeight}`;
+    heatDirty=true;fitCanvas();
+  };
+  img.src=URL.createObjectURL(file);
+}
+
+// ── Mode ─────────────────────────────────────────────────────────────────────
+function setMode(v){
+  bivMode=(v==='bivariate');
+  document.getElementById('std-controls').style.display=bivMode?'none':'';
+  document.getElementById('biv-controls').style.display=bivMode?'':'';
+  // Show/hide standard legend
+  document.getElementById('legbar').style.display=bivMode?'none':'';
+  document.querySelector('.leglab').style.display=bivMode?'none':'';
+  heatDirty=true;
+  if(bivMode)renderBivLegend();
+}
+
+function renderBivLegend(){
+  const cv2=document.getElementById('biv-legend');
+  const ctx2=cv2.getContext('2d');
+  const W=cv2.width,H=cv2.height;
+  // 2D colour grid: X = metric (low→high = left→right), Y = density (low→high = bottom→top)
+  const img=ctx2.createImageData(W,H),d=img.data;
+  for(let px=0;px<W;px++)for(let py=0;py<H;py++){
+    const tx=px/W, ty=1-(py/H);  // ty: top=high density
+    const[r,g,b]=bivColor(tx,ty);
+    const idx=(py*W+px)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;d[idx+3]=220;
+  }
+  ctx2.putImageData(img,0,0);
+  // Axis labels
+  ctx2.fillStyle='rgba(255,255,255,.6)';ctx2.font='6px monospace';ctx2.textAlign='center';
+  ctx2.fillText('Low metric',22,H-2);ctx2.fillText('High',W-16,H-2);
+}
+
+// Bivariate colour: tx = metric [0,1], ty = density [0,1]
+// Matches Figure 8 logic: black(low,low) → blue(high metric,low density)
+//   → yellow(low metric,high density) → white(high,high)
+function bivColor(tx,ty){
+  // Channel mapping:
+  // R: both high → white; high density only → yellow
+  // G: high density → yellow/white; low → dark
+  // B: high metric → blue/white; low metric+high dens → yellow (no blue)
+  const r=Math.round((tx*0.3+ty*0.85)*255);
+  const g=Math.round((ty*0.82)*255);
+  const b=Math.round((tx*0.85+ty*0.15)*255);
+  return[Math.min(255,r),Math.min(255,g),Math.min(255,b)];
+}
+
+// ── Filter UI ─────────────────────────────────────────────────────────────────
+function buildFilterUI(){
+  buildTagGroup('filter-wrap', allPids, activePids, p=>pidColors[p]);
+  buildTagGroup('type-wrap', allTypes, activeTypes, ()=>null);
+  buildTagGroup('sess-wrap', allSess.map(s=>s.replace('|',' ')), new Set(allSess.map(s=>s.replace('|',' '))), ()=>null,
+    // map display name back to set key
+    (disp)=>{ if(activeSess.has(disp.replace(' ','|')))activeSess.delete(disp.replace(' ','|')); else activeSess.add(disp.replace(' ','|')); });
+}
+function buildTagGroup(wrapId, items, activeSet, colorFn, toggleFn){
+  const wrap=document.getElementById(wrapId);
+  if(!wrap)return;
+  wrap.innerHTML='';
+  if(!items.length){wrap.innerHTML='<span style="font-size:8px;color:var(--muted)">—</span>';return;}
+  // All button
+  const allBtn=document.createElement('button');
+  allBtn.className='ftag on';allBtn.textContent='All';
+  allBtn.onclick=()=>{
+    const allOn=activeSet.size===items.length;
+    if(allOn)activeSet.clear();else items.forEach(i=>activeSet.add(i));
+    buildFilterUI();heatDirty=true;
+  };
+  wrap.appendChild(allBtn);
+  items.forEach(item=>{
+    const btn=document.createElement('button');
+    btn.className='ftag'+(activeSet.has(item)?' on':'');
+    btn.textContent=item;
+    const col=colorFn(item);
+    if(col){btn.style.borderColor=col;if(activeSet.has(item))btn.style.color=col;}
+    btn.onclick=()=>{
+      if(toggleFn){toggleFn(item);}
+      else{if(activeSet.has(item))activeSet.delete(item);else activeSet.add(item);}
+      btn.className='ftag'+(activeSet.has(item)?' on':'');
+      if(col&&activeSet.has(item))btn.style.color=col;else if(col)btn.style.color='';
+      heatDirty=true;
+    };
+    wrap.appendChild(btn);
+  });
+}
+
+// ── Frame helpers ─────────────────────────────────────────────────────────────
+function currentFrame(){return frames[Math.min(frameIndex,frames.length-1)];}
+
+function visibleRowsInFrame(fr){
+  if(!fr)return[];
+  return fr.rows.filter(r=>{
+    if(allPids.length>0&&!activePids.has(r.person_id))return false;
+    if(allTypes.length>0&&!activeTypes.has(r.zone_type))return false;
+    const sessKey=r.day+'|'+r.session;
+    if(allSess.length>0&&!activeSess.has(sessKey))return false;
+    return true;
+  });
+}
+
+// ── Accumulate frame into heat/tracks ────────────────────────────────────────
+function accumulateFrame(fr){
+  const rows=visibleRowsInFrame(fr);
+  const seenP=new Set();
+  rows.forEach(r=>{
+    // Store metric value as 3rd element for bivariate mode
+    const _bivX=document.getElementById('biv-x').value;
+    const _metVal=(_bivX&&r[_bivX]!==undefined)?r[_bivX]:0;
+    heatPts.push([r.floor_x,r.floor_y,_metVal]);
+    if(!trackHistory[r.person_id])trackHistory[r.person_id]=[];
+    const th=trackHistory[r.person_id],last=th[th.length-1];
+    if(!last||Math.hypot(r.floor_x-last[0],r.floor_y-last[1])>0.002)
+      th.push([+r.floor_x.toFixed(4),+r.floor_y.toFixed(4)]);
+    if(th.length>400)th.shift();
+    if(!seenP.has(r.person_id)){
+      seenP.add(r.person_id);
+      personFrames[r.person_id]=(personFrames[r.person_id]||0)+1;
+    }
+  });
+  if(heatPts.length>80000){heatPts=heatPts.slice(-60000);}
+  heatDirty=true;
+}
+
+// ── Build heatmap offscreen (standard or bivariate) ──────────────────────────
+function buildHeatmap(){
+  const W=cv.width,H=cv.height;if(!W||!H||!heatPts.length)return;
+  // Radius in pixels: slider value × a fixed scale tied to floor coord range
+  // Use a fixed pixel size so heatmap doesn't expand beyond data extents
+  const rSlider=parseFloat(document.getElementById('radius').value)||3;
+  const R=Math.max(2,Math.round(rSlider*8)); // 8px per unit — feels right on ~800px canvas
+  const cmap=document.getElementById('cmap').value||'heat';
+
+  // Density accumulation (always needed)
+  const den=new Float32Array(W*H);
+  heatPts.forEach(p=>{
+    const cx=Math.round(p[0]*W),cy=Math.round(p[1]*H);
+    for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
+      const d2=dx*dx+dy*dy;if(d2>R*R)continue;
+      const ix=cx+dx,iy=cy+dy;if(ix<0||ix>=W||iy<0||iy>=H)continue;
+      den[iy*W+ix]+=(1-Math.sqrt(d2)/R);
+    }
+  });
+  let dmax=0;for(let i=0;i<den.length;i++)if(den[i]>dmax)dmax=den[i];
+  if(!dmax)return;
+
+  const off=document.createElement('canvas');off.width=W;off.height=H;
+  const oc=off.getContext('2d'),img=oc.createImageData(W,H),d=img.data;
+
+  if(bivMode){
+    // Bivariate: also need metric accumulation
+    const metricCol=document.getElementById('biv-x').value;
+    const yAxis=document.getElementById('biv-y').value;
+
+    // Build metric grid: weighted average of metric at each pixel
+    const metSum=new Float32Array(W*H);
+    const metW  =new Float32Array(W*H);
+    heatPts.forEach((p,pi)=>{
+      const metVal = (metricCol && p[2]!==undefined) ? p[2] : 0;
+      const cx=Math.round(p[0]*W),cy=Math.round(p[1]*H);
+      for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
+        const d2=dx*dx+dy*dy;if(d2>R*R)continue;
+        const ix=cx+dx,iy=cy+dy;if(ix<0||ix>=W||iy<0||iy>=H)continue;
+        const w=1-Math.sqrt(d2)/R;
+        metSum[iy*W+ix]+=w*metVal;
+        metW[iy*W+ix]+=w;
+      }
+    });
+    // Normalise metric
+    let mMn=Infinity,mMx=-Infinity;
+    for(let i=0;i<metW.length;i++){if(metW[i]>0){const v=metSum[i]/metW[i];if(v<mMn)mMn=v;if(v>mMx)mMx=v;}}
+    const mRng=mMx-mMn||1;
+
+    for(let i=0;i<den.length;i++){
+      const dens=den[i]/dmax; if(dens<0.005)continue;
+      const tx=metW[i]>0?(metSum[i]/metW[i]-mMn)/mRng:0; // metric normalised
+      // Y axis: density or another metric
+      const ty=yAxis==='density'||!yAxis?dens:
+        (metW[i]>0?(metSum[i]/metW[i]-mMn)/mRng:0);
+      const[r,g,b]=bivColor(tx,yAxis==='density'||!yAxis?dens:ty);
+      d[i*4]=r;d[i*4+1]=g;d[i*4+2]=b;d[i*4+3]=Math.round(Math.max(dens,0.3)*255);
+    }
+    renderBivLegend();
+  } else {
+    // Standard mode
+    const hue=parseInt(document.getElementById('heat-hue').value)||0;
+    for(let i=0;i<den.length;i++){
+      const v=den[i]/dmax;if(v<0.005)continue;
+      const[r,g,b]=hueShift(cmapColor(v,cmap),hue);
+      d[i*4]=r;d[i*4+1]=g;d[i*4+2]=b;d[i*4+3]=Math.round(v*255);
+    }
+  }
+
+  oc.putImageData(img,0,0);
+  heatCanvas=off;heatDirty=false;
+}
+
+function renderLegend(){
+  const lc=document.getElementById('legbar'),lctx=lc.getContext('2d');
+  const W=lc.width,H=lc.height,cmap=document.getElementById('cmap').value||'heat';
+  const hue=parseInt(document.getElementById('heat-hue').value)||0;
+  const img=lctx.createImageData(W,H),d=img.data;
+  for(let x=0;x<W;x++){
+    const[r,g,b]=hueShift(cmapColor(x/W,cmap),hue);
+    for(let y=0;y<H;y++){const idx=(y*W+x)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;d[idx+3]=220;}
+  }
+  lctx.putImageData(img,0,0);
+}
+
+// ── Main draw ─────────────────────────────────────────────────────────────────
+function draw(){
+  fitCanvas();
+  const W=cv.width,H=cv.height;if(!W||!H)return;
+
+  // Rebuild heatmap if dirty
+  if(heatDirty&&heatPts.length>0)buildHeatmap();
+
+  ctx.clearRect(0,0,W,H);
+  if(!floorImg){ctx.fillStyle='#080b14';ctx.fillRect(0,0,W,H);}
+  else if(showBG){ctx.drawImage(floorImg,0,0,W,H);}
+
+  const op=parseFloat(document.getElementById('opacity').value)||0.82;
+
+  // Heatmap
+  if(showHeat&&heatCanvas){ctx.save();ctx.globalAlpha=op;ctx.drawImage(heatCanvas,0,0);ctx.restore();}
+
+  // Tracks
+  if(showTrack){
+    Object.entries(trackHistory).forEach(([pid,pts])=>{
+      if(pts.length<2)return;
+      if(allPids.length>0&&!activePids.has(pid))return;
+      ctx.beginPath();ctx.moveTo(pts[0][0]*W,pts[0][1]*H);
+      for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0]*W,pts[i][1]*H);
+      const tAlpha=Math.round((parseFloat(document.getElementById('track-opacity').value)||0.53)*255).toString(16).padStart(2,'0');
+      const tWidth=parseFloat(document.getElementById('track-width').value)||1.4;
+      ctx.strokeStyle=pidColors[pid]+tAlpha;ctx.lineWidth=tWidth;ctx.stroke();
+    });
+  }
+
+  // Live dots (current frame)
+  if(showLive&&frames.length){
+    const rows=visibleRowsInFrame(currentFrame());
+    rows.forEach(r=>{
+      const col=pidColors[r.person_id]||'#4c9fd4';
+      const cx=r.floor_x*W, cy=r.floor_y*H;
+      const dSz=parseFloat(document.getElementById('dot-size').value)||6;
+      ctx.beginPath();ctx.arc(cx,cy,dSz,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
+      ctx.beginPath();ctx.arc(cx,cy,dSz*1.6,0,Math.PI*2);ctx.strokeStyle=col+'44';ctx.lineWidth=1.2;ctx.stroke();
+      ctx.fillStyle='white';ctx.font='bold 7px monospace';ctx.textAlign='center';ctx.fillText(r.person_id,cx,cy+2.5);
+    });
+  }
+
+  // Update UI
+  updateUI();
+}
+
+// ── UI update ─────────────────────────────────────────────────────────────────
+function updateUI(){
+  const n=frames.length,i=Math.min(frameIndex,n-1);
+  const pct=n>0?Math.min(i/(n-1)*100,100):0;
+  document.getElementById('tlf').style.width=pct.toFixed(1)+'%';
+  document.getElementById('tlth').style.left=pct.toFixed(1)+'%';
+  const fr=currentFrame();
+  const r0=fr?.rows[0];
+  const lbl=r0?.datetime||(r0?`${r0.day} ${r0.session} t=${r0.time_sec}`:'—');
+  document.getElementById('ts-disp').textContent=lbl;
+  document.getElementById('tslbl').textContent=`${i+1} / ${n}`;
+
+  // Person dwell bars
+  const mxF=Math.max(...Object.values(personFrames),1);
+  const inFrame=new Set(visibleRowsInFrame(fr||{rows:[]}).map(r=>r.person_id));
+  document.getElementById('plist').innerHTML=allPids.length?allPids.map(pid=>{
+    const cnt=personFrames[pid]||0,pct2=Math.round(cnt/mxF*100),col=pidColors[pid];
+    return`<div class="prow">
+      <div class="pdot" style="background:${col}${cnt?'':'55'}"></div>
+      <span class="pnm">${pid}</span>
+      <div class="bb"><div class="bf" style="width:${pct2}%;background:${col}"></div></div>
+      <span class="bv">${cnt||'—'}</span>
+      <span style="font-size:9px;color:${col};width:8px">${inFrame.has(pid)?'●':''}</span>
+    </div>`;
+  }).join(''):'<div style="font-size:8px;color:var(--muted)">No data</div>';
+}
+
+// ── Layers ────────────────────────────────────────────────────────────────────
+function togL(m){
+  if(m==='heat') {showHeat=!showHeat;  document.getElementById('mb-heat').className='mb'+(showHeat?' on':'');}
+  if(m==='track'){showTrack=!showTrack;document.getElementById('mb-track').className='mb'+(showTrack?' on':'');}
+  if(m==='live') {showLive=!showLive;  document.getElementById('mb-live').className='mb'+(showLive?' on':'');}
+  if(m==='bg')   {showBG=!showBG;      document.getElementById('mb-bg').className='mb'+(showBG?' on':'');}
+}
+
+// ── Playback ──────────────────────────────────────────────────────────────────
+function startLoop(){
+  if(loopId)cancelAnimationFrame(loopId);
+  lastMs=null;playAccum=0;
+  function tick(ms){
+    const dt=lastMs!==null?Math.min((ms-lastMs)/1000,.2):0;
+    lastMs=ms;
+    if(playing&&frames.length){
+      playAccum+=dt*speed;
+      while(playAccum>=1&&frameIndex<frames.length-1){
+        playAccum-=1;frameIndex++;accumulateFrame(currentFrame());
+      }
+      if(frameIndex>=frames.length-1){setPlaying(false);playAccum=0;}
+    }
+    draw();
+    loopId=requestAnimationFrame(tick);
+  }
+  loopId=requestAnimationFrame(tick);
+}
+
+function setPlaying(v){
+  playing=v;
+  const ic=document.getElementById('picon');
+  if(v){ic.className='brs';ic.innerHTML='<div class="br"></div><div class="br"></div>';setPill('p-play','● PLAYING');}
+  else{ic.className='tri';ic.innerHTML='';if(frames.length)setPill('p-ok','READY');}
+}
+function togglePlay(){
+  if(!frames.length){alert('Load a CSV first.');return;}
+  if(!playing&&frameIndex>=frames.length-1){clearAndReset();}
+  setPlaying(!playing);
+}
+function stepFrame(dir){
+  if(!frames.length)return;
+  setPlaying(false);
+  const prev=frameIndex;
+  frameIndex=Math.max(0,Math.min(frames.length-1,frameIndex+dir));
+  if(dir>0&&frameIndex!==prev)accumulateFrame(currentFrame());
+  if(dir<0){// going back — reset heat/tracks and re-accumulate up to current
+    heatPts=[];heatCanvas=null;trackHistory={};personFrames={};heatDirty=true;
+    for(let i=0;i<=frameIndex;i++)accumulateFrame(frames[i]);
+  }
+}
+function seekClick(e){
+  if(!frames.length)return;
+  const r=document.getElementById('tlt').getBoundingClientRect();
+  const ni=Math.round((e.clientX-r.left)/r.width*(frames.length-1));
+  const prev=frameIndex;
+  frameIndex=Math.max(0,Math.min(frames.length-1,ni));
+  if(ni<prev){// scrubbing back — full reset and re-accumulate
+    heatPts=[];heatCanvas=null;trackHistory={};personFrames={};heatDirty=true;
+    for(let i=0;i<=frameIndex;i++)accumulateFrame(frames[i]);
+  } else {
+    for(let i=prev+1;i<=frameIndex;i++)accumulateFrame(frames[i]);
+  }
+  setPlaying(false);
+}
+function setSpeed(v){speed=parseFloat(v)||1;}
+function clearAndReset(){
+  frameIndex=0;heatPts=[];heatCanvas=null;heatDirty=true;
+  trackHistory={};personFrames={};playAccum=0;
+  setPlaying(false);
+}
+
+// ── Save / Reset ──────────────────────────────────────────────────────────────
+function savePNG(){
+  if(!cv.width){alert('Nothing to save yet.');return;}
+  cv.toBlob(blob=>{
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download='heatmap.png';a.click();
+  },'image/png');
+}
+function resetAll(){
+  allRows=[];frames=[];frameIndex=0;floorImg=null;
+  heatPts=[];heatCanvas=null;heatDirty=true;
+  trackHistory={};personFrames={};
+  activePids=new Set();activeTypes=new Set();activeSess=new Set();
+  allPids=[];allTypes=[];allSess=[];pidColors={};
+  setPlaying(false);setPill('p-idle','IDLE');
+  ['uz-csv','uz-floor'].forEach(id=>{
+    const el=document.getElementById(id);el.className='upz';
+    el.innerHTML=id==='uz-csv'?'<b>CSV file</b>needs floor_x · floor_y':'<b>Floor plan</b>PNG · JPG (optional)';
+  });
+  document.getElementById('filter-sec').style.display='none';
+  document.getElementById('dwell-sec').style.display='none';
+  document.getElementById('hint').style.display='';
+  document.getElementById('data-info').textContent='Awaiting CSV…';
+  document.getElementById('ts-disp').textContent='';
+  document.getElementById('tslbl').textContent='— / —';
+  document.getElementById('tlf').style.width='0%';
+  document.getElementById('tlth').style.left='0%';
+  fitCanvas();
+}
+
+function setPill(cls,txt){const p=document.getElementById('pill');p.className='pill '+cls;p.textContent=txt;}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+renderLegend();
+fitCanvas();
+startLoop();
+</script>
+</body>
+</html>
