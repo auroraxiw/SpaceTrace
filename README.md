@@ -1,173 +1,203 @@
-# SpaceTrace Toolkit
+# SpaceTrace — Spatial Analysis Tool
 
-https://auroraxiw.github.io/SpaceTrace
-
-A suite of browser-based tools for mapping CCTV person-tracking data and isovist/Space Syntax analysis results onto architectural floor plans — no server, no installation, no dependencies. Everything runs entirely in your browser from a single HTML file.
-
-Built for spatial behaviour research in ICE (Isolated, Confined, and Extreme) environments at the [Cambridge Cognitive Architecture Lab / NeuroCivitas Lab](https://www.neurocivitas.com), University of Cambridge.
-
-Compatible with [YOLOv11 + BoT-SORT + ReID](https://github.com/ultralytics/ultralytics) tracking pipeline output and [DepthMap / depthmapX](https://www.spacesyntax.net/software/) isovist analysis output.
+**SpaceTrace** is a browser-based spatial analysis tool for ICE (Isolated, Confined, and Extreme) environment research. It calibrates Space Syntax point clouds and CCTV tracking data onto floor plans, enabling replay, heatmap, proximity, and behavioural analysis without any installation.
 
 ---
 
-## Tools
+## Files
 
-### 1. `index.html` — Spatial Analysis Studio ⭐ (main tool)
+| File | Description |
+|------|-------------|
+| `spacetrace-calibrate.html` | Step-by-step calibration wizard |
+| `spacetrace-analyse.html` | Replay and analysis interface |
 
-The integrated tool combining all features:
-
-- **Space Analysis layer** — visualise any isovist/Space Syntax metric (Integration, Choice, Vista, etc.) as a colour-mapped point cloud on the floor plan
-- **CCTV replay layer** — replay YOLOv11 person tracking data as live dots, trajectory trails, and accumulating heatmap
-- **Independent calibration** for both data sources — affine transform (least-squares, no deformation) using point-pair matching
-- **Zone drawing** with `Private / Semi-public / Public` type labels and live dwell-time statistics
-- **Zone type filter** — show/hide zones by type during replay
-- **Camera panel** — displays reference frame or video at natural aspect ratio with BBox overlay
-- **Playback speeds** from 0.25× to 500×
-
-#### Export options
-| Export | Contents |
-|--------|----------|
-| Analysis CSV | Original + `floor_x`, `floor_y`, `zone`, `zone_type` |
-| CCTV CSV | Original + `floor_x`, `floor_y`, `zone`, `zone_type` |
-| **Merged CSV** | Every CCTV row + nearest analysis point's full metric values (Area, Vista, Integration HH, etc.) |
-| PNG | Floor plan with all visible layers composited |
+**Both files must be in the same folder.** Open `spacetrace-calibrate.html` to begin.
 
 ---
 
-### 2. `cctv_floor_mapper.html` — CCTV Floor Mapper
-
-Standalone CCTV-only tool for importing YOLOv11 tracking CSV and mapping it onto a floor plan.
-
-**7-step wizard:**
-1. Import CSV
-2. Upload reference frame or video
-3. Upload floor plan
-4. Homography calibration (IDW, click point pairs)
-5. Draw zones
-6. Replay
-7. Export
-
-**Features:** heatmap, trajectory trails, live person dots, dwell-time statistics, person ID labelling, multi-camera support, CSV re-export.
-
----
-
-### 3. `space_analysis_mapper.html` — Space Analysis Mapper
-
-Standalone tool for isovist/Space Syntax CSV visualisation.
-
-**5-step wizard:**
-1. Load analysis CSV
-2. Upload floor plan
-3. Calibrate (affine transform, point-pair matching on point cloud preview)
-4. Draw zones
-5. Export
-
-**Features:** 4 colour maps, adjustable point size and opacity, zone polygon drawing with delete/undo, zone dwell assignment, CSV export with `floor_x/y/zone` columns.
-
----
-
-## Input CSV Formats
-
-### YOLOv11 + BoT-SORT tracking CSV (for CCTV tools)
-
-| Column | Description |
-|--------|-------------|
-| `frame` | Frame number |
-| `time_sec` | Seconds from video start |
-| `datetime` | ISO datetime string |
-| `camera` | Camera ID e.g. `C1` |
-| `track_id` | Raw tracker ID |
-| `person_id` | Resolved person ID e.g. `AA01` |
-| `x1`, `y1`, `x2`, `y2` | Bounding box in original image pixels |
-| `cx_norm`, `cy_norm` | Normalised centre point [0–1] |
-| `confidence` | Detection confidence |
-
-### Space Syntax / isovist analysis CSV
-
-| Column | Description |
-|--------|-------------|
-| `x`, `y` | Real-world coordinates (any unit) |
-| `Area`, `Vista`, `Integration (HH)`, … | Analysis metric columns (any names) |
-
-The tool auto-detects all metric columns beyond `x`, `y`, and `ref`.
-
----
-
-## Calibration Method
-
-Both tools use **affine transform** least-squares fitting:
+## Workflow Overview
 
 ```
-floor_x = a·src_x + b·src_y + tx
-floor_y = c·src_x + d·src_y + ty
+spacetrace-calibrate.html  →  Open Analysis →  spacetrace-analyse.html
+         ↑                                              |
+         └──────────── ← Calibrate ───────────────────┘
 ```
-
-- 6 parameters: independent X/Y scale, rotation, translation
-- **No deformation** — parallel lines stay parallel
-- Solved by closed-form least squares from ≥3 point pairs
-- Status display shows `scaleX`, `scaleY`, `rotation`, mean reprojection error
-
-This differs from the older CCTV Floor Mapper which uses IDW interpolation (local, non-rigid).
 
 ---
 
-## File Structure
+## Part 1 — Calibrate
 
-```
-spatial-analysis-studio/
-├── index.html                    ← Integrated studio (main tool)
-├── cctv_floor_mapper.html        ← CCTV-only tool
-├── space_analysis_mapper.html    ← Space analysis visualiser
-├── README.md
-├── LICENSE
-├── .gitignore
-└── example/
-    ├── sample_tracking_format.csv     ← Example YOLOv11 CSV format
-    └── sample_analysis_format.csv     ← Example space analysis CSV format
-```
+Open `spacetrace-calibrate.html` in any modern browser (Chrome, Safari, Edge).
+
+### Step 1 — Floor Plan
+
+Upload a PNG or JPG of your floor plan. This is the spatial reference for all calibration. Any resolution works.
+
+### Step 2 — Space Syntax Calibration *(optional)*
+
+Upload a depthmapX CSV containing `x`, `y`, and metric columns (e.g. Integration, Connectivity).
+
+**To calibrate:**
+1. Click a recognisable point on the **left panel** (SS point cloud) — e.g. a corner, doorway, or column
+2. Click the matching point on the **right panel** (floor plan)
+3. Repeat for **5–8 pairs**, spread across the full extent of the space
+4. Click **Apply** — a blue overlay appears on the floor plan; check alignment
+5. If the fit looks good, click **Looks good → Continue**
+
+> **Tips:** Cover all four corners and the centre. The fit quality score (Excellent / Good / Fair / Poor) helps diagnose bad pairs. Click Re-do to start again.
+
+**Preset:** Save your calibration as a JSON file for reuse. Import it next time to skip this step.
+
+### Step 3 — Tracking Data Calibration *(optional)*
+
+Upload a CCTV reference frame (screenshot) and your tracking CSV.
+
+**Supported tracking CSV formats:**
+
+| Columns present | How position is computed |
+|-----------------|--------------------------|
+| `floor_x`, `floor_y` | Used directly — no calibration needed |
+| `cx_norm`, `cy_norm` | Normalised bounding box centre |
+| `x1`, `y1`, `x2`, `y2` | Bottom-edge centre `((x1+x2)/2, y2)` — foot contact point |
+
+**To calibrate:**
+1. Click a recognisable point on the **left panel** (camera frame)
+2. Click the matching point on the **right panel** (floor plan)
+3. Repeat for **4+ pairs**
+4. Click **Apply calibration**
+
+**Preset:** Save and reload as JSON.
+
+### Step 4 — Zones *(optional)*
+
+Draw named polygons on the floor plan to tag areas (e.g. Workspace, Kitchen, Corridor). Each zone has a **Privacy** setting: Public / Shared / Private. Zone labels are embedded in the exported CSVs.
+
+### Step 5 — Download & Open Analysis
+
+Download the calibrated CSVs:
+- `space_syntax_calibrated.csv`
+- `tracking_calibrated.csv`
+
+Click **Open Analysis →** to open the analysis interface with your data pre-loaded.
+
+---
+
+## Part 2 — Analyse
+
+The analysis interface opens from calibrate, or can be opened directly with your calibrated CSVs.
+
+### Uploading Data
+
+In the **Data** panel (Step 1):
+
+- **Tracking CSV** — Upload `tracking_calibrated.csv` (must contain `floor_x`, `floor_y`)
+- **Floor Plan** — Upload the same floor plan image used in calibration
+- **Space Syntax CSV** *(optional)* — Upload `space_syntax_calibrated.csv`
+
+After loading, use **Filter by Person** / **Filter by Session** to narrow the dataset.
+
+### Replay Controls
+
+| Control | Function |
+|---------|----------|
+| ▶ / ⏸ | Play / Pause |
+| ‹ › | Step one frame |
+| ↺ | Reset to frame 1 |
+| Timeline bar | Scrub to any frame |
+| Speed selector | 0.5× · 1× · 2× · 5× · 10× · 50× · 100× · 500× |
+
+### Display Layers (Step 3)
+
+Toggle layers on/off:
+
+- **Heatmap** — Cumulative presence density
+- **Tracks** — Historical movement trails
+- **Live dots** — Current frame positions
+- **Floor plan** — Background image
+
+### Space Analysis (Step 4)
+
+Overlay Space Syntax metrics (Integration, Connectivity, Visual Depth, etc.) as a bivariate colour map on the floor plan. Select the metric from the dropdown and adjust opacity.
+
+### Behavioural Analysis (Step 5)
+
+Six analysis modules, each with configurable time window (Current / Past 10–500 frames / Custom):
+
+| Module | What it shows |
+|--------|---------------|
+| **Heatmap** | Cumulative spatial density |
+| **Raw Trajectory** | Full movement paths per person |
+| **Proximity** | Interpersonal distances (Hall 1966 zones: Intimate / Personal / Social / Public) |
+| **Visual Encounter** | Co-presence based on isovist overlap |
+| **Congregation** | Spatial clustering over time |
+| **Approach & Avoid** | Movement vectors toward/away from others |
+
+### Video Validate *(optional)*
+
+Click **▶ Video Validate** in the top bar to open a floating panel.
+
+1. Click the panel to upload your CCTV video (MP4)
+2. The video syncs frame-by-frame with the replay via the `time_sec` column
+3. Bounding boxes and person IDs are drawn on the video
+4. Use ‹ › buttons to step one frame at a time
+5. Drag the panel anywhere on screen; resize from the corner
+
+> The replay is always the master clock. The video seeks to match each frame's `time_sec` value.
+
+---
+
+## CSV Column Reference
+
+### Tracking CSV (input to calibrate)
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| `person_id` | ✓ | Unique identifier per person |
+| `time_sec` | ✓ | Timestamp in seconds (for replay sync) |
+| `floor_x` / `floor_y` | or bbox | Normalised position [0–1] on floor plan |
+| `x1`, `y1`, `x2`, `y2` | or above | Bounding box pixel coordinates |
+| `cx_norm`, `cy_norm` | or above | Normalised bounding box centre |
+| `day` | recommended | Day label (for multi-day datasets) |
+| `session` | recommended | Session label |
+| `camera` | optional | Camera ID (for multi-camera filtering) |
+| `zone_type` | optional | Activity type (for filtering) |
+
+### Space Syntax CSV (input to calibrate)
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| `x`, `y` | ✓ | depthmapX coordinates |
+| Any metric | recommended | e.g. `Integration (HH)`, `Connectivity` |
 
 ---
 
 ## Browser Compatibility
 
-Tested in Chrome 120+ and Firefox 121+. Requires Canvas API and File API. No WebGL, no external CDN, no cookies, no server.
+| Browser | Support |
+|---------|---------|
+| Chrome / Edge | ✓ Recommended |
+| Safari | ✓ Supported |
+| Firefox | ✓ Supported |
 
-> Large CSV files (>25 MB) are parsed in chunks on the main thread — progress bar shown. The browser UI remains responsive throughout.
-
----
-
-## Camera Labels (default, CCTV Mapper)
-
-| ID | Space |
-|----|-------|
-| C1 | Atrium |
-| C2 | Junction |
-| C3 | Kitchen |
-| C4 | Operations |
-| C5 | Mech WS |
-| C6 | Elec WS |
-| C7 | Bio Lab |
-
-Edit the `CAM_LABELS` constant in `cctv_floor_mapper.html` to match your site.
+No installation, no server, no internet connection required after download.
 
 ---
 
-## Research Context
+## Navigation
 
-Developed for doctoral research on **spatial configuration and human behaviour in confinement environments**, Cambridge Cognitive Architecture Lab / NeuroCivitas Lab, University of Cambridge. Data collected at [Lunares Research Station](https://lunares.space), Poland (LunAres M1 mission, 7 participants, 14 days, 7 cameras).
-
----
-
-## GitHub Pages
-
-To deploy as a live web tool (no download required for users):
-
-1. Push this repo to GitHub
-2. Settings → Pages → Deploy from branch `main`, folder `/`
-3. Access at `https://YOUR_USERNAME.github.io/spatial-analysis-studio`
+- **Calibrate → Analyse:** Click **Open Analysis →** in calibrate. The latest version of the analysis interface opens in a new tab with your data pre-loaded.
+- **Analyse → Calibrate:** Click **← Calibrate** to return. If opened via calibrate, the tab closes and calibrate returns to focus.
 
 ---
 
-## License
+## Credits
 
-MIT License — see `LICENSE`.
+Built at the **NeuroCīvitās Lab**, University of Cambridge, as part of the **SPACE4SPACE** project investigating spatial configuration and crew behavioural health in ICE environments.
+
+**Principal Investigator:** Dr. Michal Gath-Morad  
+**Developer:** Aurora Xi Wang  
+**Supervisors:** Prof. Koen Steemers, Dr. Davide Schaumann
+
+---
+
+*SpaceTrace v0.1 · Cambridge NeuroCīvitās Lab · 2026*
